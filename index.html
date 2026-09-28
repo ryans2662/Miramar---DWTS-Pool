@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ballroom Pool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEEDF3; --paper:#FFFFFF; --ink:#221B35; --muted:#6B6580; --line:#DAD7E4;
+  --rose:#B8325F; --rose-soft:#F6E3EA;
+  --gold:#A8801F; --gold-soft:#F5ECD4;
+  --silver:#6F7686; --silver-soft:#E8EAEF;
+  --bronze:#9C5B34; --bronze-soft:#F3E4DA;
+  --ok:#2F7A55;
+  --display:"Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  --body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16121F; --paper:#211B2E; --ink:#EEEAF6; --muted:#A39CB8; --line:#342C45;
+    --rose:#E0698F; --rose-soft:#3A2130;
+    --gold:#D6B25A; --gold-soft:#342B17;
+    --silver:#AEB4C2; --silver-soft:#2A2835;
+    --bronze:#D08A5E; --bronze-soft:#35231A;
+    --ok:#6CC495;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16121F; --paper:#211B2E; --ink:#EEEAF6; --muted:#A39CB8; --line:#342C45;
+  --rose:#E0698F; --rose-soft:#3A2130;
+  --gold:#D6B25A; --gold-soft:#342B17;
+  --silver:#AEB4C2; --silver-soft:#2A2835;
+  --bronze:#D08A5E; --bronze-soft:#35231A;
+  --ok:#6CC495;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--body)}
+.wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.brand h1{font:700 clamp(2.2rem,6vw,3.4rem)/1 var(--display);margin:0;letter-spacing:-.01em}
+.brand p{margin:6px 0 0;color:var(--muted)}
+.weekmark{font:500 1.05rem var(--display);color:var(--muted);text-align:right}
+.weekmark b{display:block;font:700 2.6rem/1 var(--display);color:var(--ink)}
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:24px}
+nav.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:600 .98rem var(--body);color:var(--muted);cursor:pointer;margin-bottom:-1px}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-color:var(--rose)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--rose);outline-offset:2px}
+.btn{background:var(--ink);color:var(--paper);border:0;border-radius:999px;padding:10px 20px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.rose{background:var(--rose);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.note{color:var(--muted);font-size:.93rem}
+.msg{padding:12px 16px;border-radius:10px;background:var(--rose-soft);margin:0 0 18px}
+.msg.ok{background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+input[type=text],input[type=number],select,textarea{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+input[type=number]{width:84px}
+
+/* tiers */
+.tiers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:22px}
+@media (max-width:760px){.tiers{grid-template-columns:1fr}}
+.tier{background:var(--paper);border-radius:14px;padding:16px 14px 12px;border-top:5px solid var(--tc)}
+.tier h2{font:700 1.35rem var(--display);margin:0 0 2px}
+.tier .sub{color:var(--muted);font-size:.86rem;margin-bottom:10px}
+.t-top{--tc:var(--gold);--ts:var(--gold-soft)}
+.t-mid{--tc:var(--silver);--ts:var(--silver-soft)}
+.t-low{--tc:var(--bronze);--ts:var(--bronze-soft)}
+.opt{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:1px solid transparent;border-radius:10px;padding:8px;cursor:pointer}
+.opt:hover:not(:disabled){background:var(--ts)}
+.opt[aria-pressed="true"]{background:var(--ts);border-color:var(--tc)}
+.opt:disabled{cursor:default}
+.opt .who{flex:1;min-width:0}
+.opt .who b{display:block;font-weight:600}
+.opt .who span{color:var(--muted);font-size:.85rem}
+.paddle{flex:none;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:700 1rem var(--display);background:var(--ts,var(--silver-soft));color:var(--ink);border:2px solid var(--tc,var(--silver))}
+.paddle.none{font:500 .75rem var(--body);color:var(--muted)}
+.submitbar{background:var(--paper);border-radius:14px;padding:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.submitbar input{flex:1;min-width:180px}
+
+/* tables */
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;background:var(--paper);border-radius:14px;overflow:hidden}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:.88rem}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.rank{font:700 1.1rem var(--display);width:40px}
+.lead td{background:var(--gold-soft)}
+.total{font:700 1.15rem var(--display)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:26px 0 12px}
+.chip{border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:.9rem}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+h3{font:700 1.3rem var(--display);margin:30px 0 10px}
+.pk{display:inline-flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--tc)}
+
+/* admin */
+.panel{background:var(--paper);border-radius:14px;padding:18px;margin-bottom:18px}
+.panel h2{font:700 1.3rem var(--display);margin:0 0 10px}
+.grid-scores{display:grid;grid-template-columns:1fr auto auto;gap:8px 14px;align-items:center}
+.grid-scores .h{color:var(--muted);font-size:.85rem;font-weight:600}
+textarea{width:100%;min-height:220px;font-size:.92rem}
+.tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.8rem;font-weight:600}
+.tag.open{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.tag.locked{background:var(--rose-soft);color:var(--rose)}
+.out{color:var(--muted);text-decoration:line-through}
+.auth{background:var(--paper);border-radius:14px;padding:18px;margin-bottom:20px}
+.auth h2{font:700 1.3rem var(--display);margin:0 0 4px}
+.linkbtn{background:none;border:0;padding:0;color:var(--rose);font-weight:600;cursor:pointer;text-decoration:underline}
+.who-line{margin:0 0 16px;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.opt{transition:background .12s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><h1>Ballroom Pool</h1><p>Pick one couple from each tier. Judges' scores decide the week.</p></div>
+    <div class="weekmark" id="weekmark"></div>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <main id="main"><p class="note">Loading the pool…</p></main>
+</div>
+<script>
+(function(){
+/* Set this to your Worker URL after `wrangler deploy`. */
+const API='https://ballroom-pool.YOUR-SUBDOMAIN.workers.dev';
+
+const TIERS=[{k:'top',label:'Top tier',cls:'t-top'},{k:'mid',label:'Middle tier',cls:'t-mid'},{k:'low',label:'Bottom tier',cls:'t-low'}];
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+let S=null,P=[],me=store.get('bp_me'),myWeeks={},adminPw=store.get('bp_admin'),adminOk=false,adminPicks={};
+let tab='picks',actingAs='self',draft={},flash=null,standWeek=null,scoreWeek=null,busy=false,loadErr=null;
+
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $=id=>document.getElementById(id);
+const wk=w=>String(w);
+const castById=id=>S.cast.find(c=>c.id===id);
+
+async function api(path,body){
+  const r=await fetch(API+path,body?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{});
+  const d=await r.json().catch(()=>({error:'Unexpected response from the server.'}));
+  if(!r.ok)throw new Error(d.error||'Request failed.');
+  return d;
+}
+function applyView(d){S=d.state;P=d.players||[];if(d.adminPicks)adminPicks=d.adminPicks}
+
+function activeIn(w){return S.cast.filter(c=>c.outWeek==null||c.outWeek>=w)}
+function avgBefore(id,w){let s=0,n=0;for(const k of Object.keys(S.scores)){if(+k<w){const v=S.scores[k]?.[id];if(typeof v==='number'){s+=v;n++}}}return n?s/n:null}
+function tiersFor(w){
+  const act=activeIn(w).map(c=>({c,avg:avgBefore(c.id,w)}));
+  act.sort((a,b)=>{if((a.avg==null)!==(b.avg==null))return a.avg==null?1:-1;if(a.avg!=null&&b.avg!==a.avg)return b.avg-a.avg;return S.cast.indexOf(a.c)-S.cast.indexOf(b.c)});
+  const n=act.length,t=Math.ceil(n/3),m=Math.ceil((n-t)/2);
+  return{top:act.slice(0,t),mid:act.slice(t,t+m),low:act.slice(t+m)};
+}
+const pickPts=(w,id)=>{const v=S.scores[wk(w)]?.[id];return typeof v==='number'?v:0};
+const weekTotal=(w,p)=>p?pickPts(w,p.top)+pickPts(w,p.mid)+pickPts(w,p.low):0;
+function standings(){
+  const weeks=Object.keys(S.locks||{}).map(Number).filter(w=>S.scores[wk(w)]).sort((a,b)=>a-b),rows={};
+  for(const w of weeks)for(const [key,p] of Object.entries(S.locks[wk(w)])){
+    rows[key]??={name:p.name,byWeek:{},total:0};const t=weekTotal(w,p);rows[key].byWeek[w]=t;rows[key].total+=t;rows[key].name=p.name}
+  return{weeks,rows:Object.values(rows).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name))};
+}
+const flashHtml=()=>flash?`<div class="msg ${flash.ok?'ok':''}">${esc(flash.text)}</div>`:'';
+
+/* ---------- render ---------- */
+function render(){
+  $('tabs').innerHTML=[['picks','Picks'],['standings','Standings'],['admin','Commissioner']].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-tab="${k}">${l}</button>`).join('');
+  if(!S){$('main').innerHTML=`<p class="note">${esc(loadErr||'Loading the pool…')}</p>`;return}
+  $('weekmark').innerHTML=`Season 35<b>Week ${S.currentWeek}</b>${S.locked?'<span class="tag locked">Picks locked</span>':'<span class="tag open">Picks open</span>'}`;
+  if(tab==='picks')renderPicks();else if(tab==='standings')renderStandings();else renderAdmin();
+}
+function currentPick(){
+  const w=wk(S.currentWeek);
+  if(actingAs==='self')return myWeeks[w]||null;
+  return adminPicks[actingAs]||null;
+}
+function renderPicks(){
+  const w=S.currentWeek,T=tiersFor(w);
+  const lockKey=actingAs==='self'?me?.id:actingAs;
+  const lockedPick=S.locked?(S.locks[wk(w)]?.[lockKey]||null):null;
+  const saved=currentPick();
+  const sel=S.locked?(lockedPick||{}):{...(saved||{}),...draft};
+  const canPick=!S.locked&&(actingAs!=='self'||me);
+  let h=flashHtml();
+  if(!me&&actingAs==='self'){
+    h+=`<div class="auth"><h2>Join the pool</h2><p class="note">Pick a name and a 4 to 8 digit PIN. You'll use them to change your picks, so keep the PIN.</p>
+      <div class="row"><input type="text" id="aname" placeholder="Name" maxlength="40" aria-label="Name"><input type="text" id="apin" inputmode="numeric" placeholder="PIN" maxlength="8" aria-label="PIN" style="width:110px">
+      <button class="btn rose" id="join" ${busy?'disabled':''}>Join</button><button class="btn ghost" id="login" ${busy?'disabled':''}>Sign in</button></div></div>`;
+  }else if(me&&actingAs==='self'){
+    h+=`<p class="who-line">Picking as <b>${esc(me.name)}</b>. <button class="linkbtn" id="logout">Sign out</button></p>`;
+  }
+  if(adminOk&&P.length){
+    h+=`<div class="row" style="margin-bottom:16px"><label for="acting">Entering picks for</label><select id="acting"><option value="self">${me?'Myself':'Nobody (browse)'}</option>${P.map(p=>`<option value="${esc(p.id)}" ${actingAs===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`;
+  }
+  if(S.locked)h+=`<div class="msg">Week ${w} picks are locked. ${lockedPick?'Your picks are highlighted below.':'Scores post after the show.'}</div>`;
+  h+=`<div class="tiers">`+TIERS.map(t=>`<section class="tier ${t.cls}"><h2>${t.label}</h2><div class="sub">${T[t.k].length} couples, ranked by season average</div>`+
+    T[t.k].map(x=>`<button class="opt" data-tier="${t.k}" data-id="${esc(x.c.id)}" aria-pressed="${sel[t.k]===x.c.id}" ${canPick?'':'disabled'}>
+      <span class="paddle ${x.avg==null?'none':''}">${x.avg==null?'new':x.avg.toFixed(1)}</span>
+      <span class="who"><b>${esc(x.c.name)}</b><span>${esc(x.c.pro||'')}</span></span></button>`).join('')+`</section>`).join('')+`</div>`;
+  if(canPick){
+    const complete=TIERS.every(t=>sel[t.k]);
+    const nm=actingAs==='self'?me.name:(P.find(p=>p.id===actingAs)?.name||'');
+    h+=`<div class="submitbar"><span style="flex:1">${actingAs==='self'?'Your picks':'Picks for <b>'+esc(nm)+'</b>'}</span>
+      <button class="btn rose" id="savePicks" ${!complete||busy?'disabled':''}>${saved?'Update picks':'Save picks'}</button></div>
+      <p class="note">${saved?'Saved. You can change your picks until the commissioner locks the week.':'Choose one couple in each tier, then save.'}</p>`;
+  }
+  $('main').innerHTML=h;
+}
+function renderStandings(){
+  const{weeks,rows}=standings();
+  if(!weeks.length){$('main').innerHTML=`<p class="note">Standings appear once a locked week has judges' scores.</p>`;return}
+  let h=`<div class="scroll"><table><thead><tr><th></th><th>Player</th>${weeks.map(w=>`<th class="num">Wk ${w}</th>`).join('')}<th class="num">Season</th></tr></thead><tbody>`;
+  let prev=null,rank=0;
+  rows.forEach((r,i)=>{if(r.total!==prev){rank=i+1;prev=r.total}
+    h+=`<tr class="${rank===1?'lead':''}"><td class="rank">${rank}</td><td>${esc(r.name)}</td>${weeks.map(w=>`<td class="num">${r.byWeek[w]??'–'}</td>`).join('')}<td class="num total">${r.total}</td></tr>`});
+  h+=`</tbody></table></div>`;
+  const lw=Object.keys(S.locks||{}).map(Number).sort((a,b)=>a-b);
+  if(standWeek==null||!lw.includes(standWeek))standWeek=lw[lw.length-1];
+  h+=`<div class="chips">${lw.map(w=>`<button class="chip" data-sw="${w}" aria-pressed="${w===standWeek}">Week ${w}</button>`).join('')}</div>`;
+  const L=S.locks[wk(standWeek)]||{},has=!!S.scores[wk(standWeek)];
+  const ent=Object.values(L).sort((a,b)=>weekTotal(standWeek,b)-weekTotal(standWeek,a));
+  h+=`<div class="scroll"><table><thead><tr><th>Player</th>${TIERS.map(t=>`<th>${t.label}</th>`).join('')}<th class="num">Week</th></tr></thead><tbody>`+
+    ent.map(p=>`<tr><td>${esc(p.name)}</td>${TIERS.map(t=>{const c=castById(p[t.k]);return`<td><span class="pk ${t.cls}"><span class="dot"></span>${esc(c?.name||'—')}${has?` <b>${pickPts(standWeek,p[t.k])}</b>`:''}</span></td>`}).join('')}<td class="num total">${has?weekTotal(standWeek,p):'–'}</td></tr>`).join('')+
+    `</tbody></table></div>${has?'':`<p class="note">Scores for week ${standWeek} aren't in yet.</p>`}`;
+  $('main').innerHTML=h;
+}
+function renderAdmin(){
+  let h=flashHtml();
+  if(!adminOk){
+    $('main').innerHTML=h+`<div class="auth"><h2>Commissioner</h2><div class="row"><input type="password" id="apw" placeholder="Commissioner password" aria-label="Commissioner password"><button class="btn" id="adminLogin" ${busy?'disabled':''}>Sign in</button></div></div>`;return}
+  const w=S.currentWeek;if(scoreWeek==null)scoreWeek=w;
+  const subs=P.filter(p=>p.picked).map(p=>p.name);
+  h+=`<div class="panel"><h2>Week ${w}</h2>
+    <p>${S.locked?`Picks are locked. ${Object.keys(S.locks[wk(w)]||{}).length} entries captured.`:`${subs.length} of ${P.length} players have picked${subs.length?': '+subs.map(esc).join(', '):''}.`}</p>
+    <div class="row">${S.locked?`<button class="btn ghost" data-act="unlock">Reopen picks</button><button class="btn" data-act="nextWeek">Start week ${w+1}</button>`:`<button class="btn rose" data-act="lock">Lock picks</button>`}</div>
+    <p class="note">Lock before the show starts. Locking captures everyone's picks at that moment; scoring uses only what was captured.</p></div>`;
+  const act=activeIn(scoreWeek);
+  h+=`<div class="panel"><h2>Judges' scores</h2><div class="row" style="margin-bottom:12px"><label for="sw">Week</label><select id="sw">${Array.from({length:w},(_,i)=>i+1).map(x=>`<option ${x===scoreWeek?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="grid-scores"><span class="h">Couple</span><span class="h">Score</span><span class="h">Eliminated</span>${act.map(c=>`<span>${esc(c.name)}</span><input type="number" min="0" step="1" data-score="${esc(c.id)}" value="${S.scores[wk(scoreWeek)]?.[c.id]??''}" aria-label="Score for ${esc(c.name)}"><input type="checkbox" data-out="${esc(c.id)}" ${c.outWeek===scoreWeek?'checked':''} aria-label="${esc(c.name)} eliminated in week ${scoreWeek}">`).join('')}</div>
+    <p class="note">Enter each couple's combined judges' total for the week, including every dance that week. A couple marked eliminated drops out of the tiers the following week.</p>
+    <button class="btn" data-act="scores">Save week ${scoreWeek} scores</button></div>`;
+  h+=`<div class="panel"><h2>Players</h2><p class="note">Players join themselves from the Picks tab. Add someone here if you'll enter their picks for them.</p>
+    <div class="row">${P.map(p=>`<span class="chip">${esc(p.name)}${p.managed?' (you enter)':''} <button class="btn ghost" style="padding:0 8px;margin-left:4px" data-rmp="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">×</button></span>`).join('')||'<span class="note">No players yet.</span>'}</div>
+    <div class="row" style="margin-top:12px"><input type="text" id="newp" placeholder="Player name" maxlength="40"><button class="btn ghost" data-act="addPlayer">Add player</button></div></div>`;
+  const out=S.cast.filter(c=>c.outWeek!=null).sort((a,b)=>a.outWeek-b.outWeek);
+  h+=`<div class="panel"><h2>Cast</h2><p class="note">One couple per line as <i>Celebrity | Pro</i>. Before any scores exist, tiers follow this order.</p>
+    ${out.length?`<p>Eliminated and removed from picks: ${out.map(c=>`<span class="out">${esc(c.name)}</span> (week ${c.outWeek})`).join(', ')}.</p>`:''}
+    <textarea id="castTxt">${esc(S.cast.map(c=>c.name+' | '+(c.pro||'')).join('\n'))}</textarea>
+    <div class="row" style="margin-top:10px"><button class="btn" data-act="cast">Save cast</button><button class="btn ghost" id="adminLogout">Sign out</button></div></div>`;
+  $('main').innerHTML=h;
+}
+
+/* ---------- actions ---------- */
+async function run(fn,okText){
+  busy=true;render();
+  try{await fn();if(okText)flash={ok:true,text:typeof okText==='function'?okText():okText}}
+  catch(e){flash={text:e.message}}
+  busy=false;render();
+}
+async function admin(action,extra={}){applyView(await api('/api/admin',{password:adminPw,action,...extra}))}
+async function refresh(){
+  try{applyView(await api('/api/state'));loadErr=null}
+  catch(e){if(!S)loadErr='Could not reach the pool server. Check the API address at the top of index.html.'}
+  if(!document.activeElement?.matches('input,textarea,select'))render();
+}
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.tab){tab=b.dataset.tab;flash=null;render();return}
+  if(b.dataset.tier){if(S.locked)return;draft[b.dataset.tier]=b.dataset.id;flash=null;renderPicks();return}
+  if(b.dataset.sw){standWeek=+b.dataset.sw;renderStandings();return}
+  if(b.id==='join'||b.id==='login'){
+    const name=$('aname').value.trim(),pin=$('apin').value.trim();
+    return run(async()=>{const d=await api(b.id==='join'?'/api/join':'/api/login',{name,pin});me={id:d.id,name:d.name,pin};myWeeks=d.weeks||{};store.set('bp_me',me);await refresh()},()=>`Welcome, ${me.name}.`)}
+  if(b.id==='logout'){me=null;myWeeks={};draft={};store.set('bp_me',null);flash=null;return render()}
+  if(b.id==='savePicks'){
+    const pick={...(currentPick()||{}),...draft};
+    return run(async()=>{
+      if(actingAs==='self'){const d=await api('/api/picks',{id:me.id,pin:me.pin,pick});myWeeks=d.weeks;await refresh()}
+      else await admin('setPicks',{id:actingAs,pick});
+      draft={};
+    },`Week ${S.currentWeek} picks saved.`)}
+  if(b.id==='adminLogin'){adminPw=$('apw').value;return run(async()=>{await admin('check');adminOk=true;store.set('bp_admin',adminPw)},'Signed in as commissioner.')}
+  if(b.id==='adminLogout'){adminOk=false;adminPw=null;store.set('bp_admin',null);actingAs='self';flash=null;return render()}
+  if(b.dataset.rmp){const p=P.find(x=>x.id===b.dataset.rmp);if(!confirm(`Remove ${p?.name}? Their locked weeks stay in the standings.`))return;
+    if(actingAs===b.dataset.rmp)actingAs='self';return run(()=>admin('removePlayer',{id:b.dataset.rmp}),`${p?.name} removed.`)}
+  const a=b.dataset.act;if(!a)return;
+  if(a==='lock')return run(()=>admin('lock'),()=>`Week ${S.currentWeek} locked with ${Object.keys(S.locks[wk(S.currentWeek)]||{}).length} entries.`);
+  if(a==='unlock')return run(()=>admin('unlock'),'Picks reopened. Lock again to recapture them.');
+  if(a==='nextWeek'){if(!S.scores[wk(S.currentWeek)]&&!confirm(`Week ${S.currentWeek} has no scores yet. Start week ${S.currentWeek+1} anyway?`))return;
+    return run(async()=>{await admin('nextWeek');scoreWeek=S.currentWeek;draft={}},()=>`Week ${S.currentWeek} is open for picks.`)}
+  if(a==='scores'){const scores={},out=[];
+    document.querySelectorAll('[data-score]').forEach(i=>{if(i.value!=='')scores[i.dataset.score]=Number(i.value)});
+    document.querySelectorAll('[data-out]').forEach(i=>{if(i.checked)out.push(i.dataset.out)});
+    return run(()=>admin('scores',{week:scoreWeek,scores,out}),`Week ${scoreWeek} scores saved.`)}
+  if(a==='addPlayer'){const name=$('newp').value.trim();if(!name)return;return run(()=>admin('addPlayer',{name}),`${name} added.`)}
+  if(a==='cast'){const cast=$('castTxt').value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{const[name,pro]=l.split('|').map(s=>s.trim());return{name,pro}});
+    return run(()=>admin('cast',{cast}),()=>`Cast saved: ${S.cast.length} couples.`)}
+});
+document.addEventListener('change',e=>{
+  if(e.target.id==='acting'){actingAs=e.target.value;draft={};flash=null;renderPicks()}
+  if(e.target.id==='sw'){scoreWeek=+e.target.value;renderAdmin()}
+});
+
+/* ---------- boot ---------- */
+render();
+(async()=>{
+  await refresh();
+  if(me){try{const d=await api('/api/login',{id:me.id,pin:me.pin});myWeeks=d.weeks||{};me.name=d.name}catch{me=null;store.set('bp_me',null)}}
+  if(adminPw){try{await admin('check');adminOk=true}catch{adminPw=null;store.set('bp_admin',null)}}
+  render();
+  setInterval(refresh,30000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
+})();
+})();
+</script>
+</body>
+</html>

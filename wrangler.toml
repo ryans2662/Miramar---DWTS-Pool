@@ -1,0 +1,12 @@
+name = "ballroom-pool"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+# Set to your GitHub Pages origin once you know it, e.g. "https://yourname.github.io"
+ALLOWED_ORIGIN = "*"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ballroom-pool"
+database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
