@@ -42,7 +42,7 @@
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--body)}
-.wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+.wrap{max-width:1220px;margin:0 auto;padding:28px 20px 60px}
 header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
 .brand h1{font:700 clamp(2.2rem,6vw,3.4rem)/1 var(--display);margin:0;letter-spacing:-.01em}
 .brand p{margin:6px 0 0;color:var(--muted)}
@@ -112,6 +112,20 @@ textarea{width:100%;min-height:220px;font-size:.92rem}
 .tag.open{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
 .tag.locked{background:var(--rose-soft);color:var(--rose)}
 .out{color:var(--muted);text-decoration:line-through}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:28px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:1fr}}
+.roster{background:var(--paper);border-radius:14px;padding:16px 16px 10px;position:sticky;top:calc(16px + env(safe-area-inset-top,0px))}
+.roster h2{font:700 1.3rem var(--display);margin:0}
+.roster .sub{color:var(--muted);font-size:.86rem;margin:2px 0 10px}
+.roster ol{list-style:none;margin:0;padding:0}
+.roster li{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.roster li .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.roster li .pts{font:700 1rem var(--display);font-variant-numeric:tabular-nums}
+.st{width:9px;height:9px;border-radius:50%;flex:none;background:var(--line)}
+.st.in{background:var(--ok)}
+.av{position:relative;flex:none;width:44px;height:44px;border-radius:50%;overflow:hidden;background:var(--ts,var(--silver-soft));display:grid;place-items:center;font:700 .9rem var(--display);color:var(--tc,var(--ink))}
+.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.opt .paddle{width:38px;height:38px;font-size:.9rem}
 .auth{background:var(--paper);border-radius:14px;padding:18px;margin-bottom:20px}
 .auth h2{font:700 1.3rem var(--display);margin:0 0 4px}
 .linkbtn{background:none;border:0;padding:0;color:var(--rose);font-weight:600;cursor:pointer;text-decoration:underline}
@@ -126,7 +140,7 @@ textarea{width:100%;min-height:220px;font-size:.92rem}
     <div class="weekmark" id="weekmark"></div>
   </header>
   <nav class="tabs" id="tabs" role="tablist"></nav>
-  <main id="main"><p class="note">Loading the pool…</p></main>
+  <div class="layout"><main id="main"><p class="note">Loading the pool…</p></main><aside class="roster" id="roster" aria-label="Players"></aside></div>
 </div>
 <script>
 (function(){
@@ -175,7 +189,19 @@ function render(){
   if(!S){$('main').innerHTML=`<p class="note">${esc(loadErr||'Loading the pool…')}</p>`;return}
   $('weekmark').innerHTML=`Season 35<b>Week ${S.currentWeek}</b>${S.locked?'<span class="tag locked">Picks locked</span>':'<span class="tag open">Picks open</span>'}`;
   if(tab==='picks')renderPicks();else if(tab==='standings')renderStandings();else renderAdmin();
+  renderRoster();
 }
+function renderRoster(){
+  const totals={};
+  for(const w of Object.keys(S.locks||{}))if(S.scores[w])for(const [id,p] of Object.entries(S.locks[w]))totals[id]=(totals[id]||0)+weekTotal(+w,p);
+  const w=wk(S.currentWeek),locked=S.locked?(S.locks[w]||{}):null;
+  const rows=P.map(p=>({...p,pts:totals[p.id]||0,inNow:locked?!!locked[p.id]:p.picked})).sort((a,b)=>b.pts-a.pts||a.name.localeCompare(b.name));
+  const nIn=rows.filter(r=>r.inNow).length;
+  $('roster').innerHTML=`<h2>Players</h2><div class="sub">${rows.length?`${nIn} of ${rows.length} ${S.locked?'locked in':'picked'} for week ${S.currentWeek}`:'No one has joined yet.'}</div>
+    <ol>${rows.map(r=>`<li><span class="st ${r.inNow?'in':''}" title="${r.inNow?'Picked':'Not picked yet'}"></span><span class="nm">${esc(r.name)}</span><span class="pts">${r.pts}</span></li>`).join('')}</ol>`;
+}
+const initials=n=>String(n||'').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
+const safeImg=u=>/^https:\/\/[^\s"'<>]+$/.test(u||'')?u:'';
 function currentPick(){
   const w=wk(S.currentWeek);
   if(actingAs==='self')return myWeeks[w]||null;
@@ -202,8 +228,9 @@ function renderPicks(){
   if(S.locked)h+=`<div class="msg">Week ${w} picks are locked. ${lockedPick?'Your picks are highlighted below.':'Scores post after the show.'}</div>`;
   h+=`<div class="tiers">`+TIERS.map(t=>`<section class="tier ${t.cls}"><h2>${t.label}</h2><div class="sub">${T[t.k].length} couples, ranked by season average</div>`+
     T[t.k].map(x=>`<button class="opt" data-tier="${t.k}" data-id="${esc(x.c.id)}" aria-pressed="${sel[t.k]===x.c.id}" ${canPick?'':'disabled'}>
-      <span class="paddle ${x.avg==null?'none':''}">${x.avg==null?'new':x.avg.toFixed(1)}</span>
-      <span class="who"><b>${esc(x.c.name)}</b><span>${esc(x.c.pro||'')}</span></span></button>`).join('')+`</section>`).join('')+`</div>`;
+      <span class="av" aria-hidden="true">${esc(initials(x.c.name))}${safeImg(x.c.photo)?`<img src="${esc(x.c.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:''}</span>
+      <span class="who"><b>${esc(x.c.name)}</b><span>${esc(x.c.pro||'')}</span></span>
+      <span class="paddle ${x.avg==null?'none':''}" title="Season average">${x.avg==null?'new':x.avg.toFixed(1)}</span></button>`).join('')+`</section>`).join('')+`</div>`;
   if(canPick){
     const complete=TIERS.every(t=>sel[t.k]);
     const nm=actingAs==='self'?me.name:(P.find(p=>p.id===actingAs)?.name||'');
@@ -250,9 +277,9 @@ function renderAdmin(){
     <div class="row">${P.map(p=>`<span class="chip">${esc(p.name)}${p.managed?' (you enter)':''} <button class="btn ghost" style="padding:0 8px;margin-left:4px" data-rmp="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">×</button></span>`).join('')||'<span class="note">No players yet.</span>'}</div>
     <div class="row" style="margin-top:12px"><input type="text" id="newp" placeholder="Player name" maxlength="40"><button class="btn ghost" data-act="addPlayer">Add player</button></div></div>`;
   const out=S.cast.filter(c=>c.outWeek!=null).sort((a,b)=>a.outWeek-b.outWeek);
-  h+=`<div class="panel"><h2>Cast</h2><p class="note">One couple per line as <i>Celebrity | Pro</i>. Before any scores exist, tiers follow this order.</p>
+  h+=`<div class="panel"><h2>Cast</h2><p class="note">One couple per line as <i>Celebrity | Pro | Photo link</i>. The photo link is optional; couples without one show initials. Before any scores exist, tiers follow this order.</p>
     ${out.length?`<p>Eliminated and removed from picks: ${out.map(c=>`<span class="out">${esc(c.name)}</span> (week ${c.outWeek})`).join(', ')}.</p>`:''}
-    <textarea id="castTxt">${esc(S.cast.map(c=>c.name+' | '+(c.pro||'')).join('\n'))}</textarea>
+    <textarea id="castTxt">${esc(S.cast.map(c=>[c.name,c.pro||'',c.photo||''].join(' | ').replace(/( \| )+$/,'')).join('\n'))}</textarea>
     <div class="row" style="margin-top:10px"><button class="btn" data-act="cast">Save cast</button><button class="btn ghost" id="adminLogout">Sign out</button></div></div>`;
   $('main').innerHTML=h;
 }
@@ -301,7 +328,7 @@ document.addEventListener('click',e=>{
     document.querySelectorAll('[data-out]').forEach(i=>{if(i.checked)out.push(i.dataset.out)});
     return run(()=>admin('scores',{week:scoreWeek,scores,out}),`Week ${scoreWeek} scores saved.`)}
   if(a==='addPlayer'){const name=$('newp').value.trim();if(!name)return;return run(()=>admin('addPlayer',{name}),`${name} added.`)}
-  if(a==='cast'){const cast=$('castTxt').value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{const[name,pro]=l.split('|').map(s=>s.trim());return{name,pro}});
+  if(a==='cast'){const cast=$('castTxt').value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{const[name,pro,photo]=l.split('|').map(s=>s.trim());return{name,pro,photo}});
     return run(()=>admin('cast',{cast}),()=>`Cast saved: ${S.cast.length} couples.`)}
 });
 document.addEventListener('change',e=>{
