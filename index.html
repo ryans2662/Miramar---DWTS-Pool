@@ -131,7 +131,7 @@ textarea{width:100%;min-height:220px;font-size:.92rem}
 <script>
 (function(){
 /* Set this to your Worker URL after `wrangler deploy`. */
-const API='https://ballroom-pool.   const API='https://ballroom-pool.ryans2662.workers.dev';.workers.dev';
+   const API='https://ballroom-pool.ryans2662.workers.dev';
 
 const TIERS=[{k:'top',label:'Top tier',cls:'t-top'},{k:'mid',label:'Middle tier',cls:'t-mid'},{k:'low',label:'Bottom tier',cls:'t-low'}];
 const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,JSON.stringify(v))}catch{}}};
