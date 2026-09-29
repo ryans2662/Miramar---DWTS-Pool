@@ -99,6 +99,8 @@ tr:last-child td{border-bottom:0}
 .chip{border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:.9rem}
 .chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 h3{font:700 1.3rem var(--display);margin:30px 0 10px}
+.rules ul{margin:0;padding-left:1.2em}
+.rules li{margin:6px 0}
 .pk{display:inline-flex;align-items:center;gap:6px}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--tc)}
 .pks{display:flex;gap:6px 16px;flex-wrap:wrap}
@@ -203,11 +205,11 @@ const flashHtml=()=>flash?`<div class="msg ${flash.ok?'ok':''}">${esc(flash.text
 
 /* ---------- render ---------- */
 function render(){
-  $('tabs').innerHTML=[['picks','Picks'],['standings','Standings'],['admin','Commissioner']].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-tab="${k}">${l}</button>`).join('');
+  $('tabs').innerHTML=[['picks','Picks'],['standings','Standings'],['rules','Rules'],['admin','Commissioner']].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-tab="${k}">${l}</button>`).join('');
   if(!S){$('main').innerHTML=`<p class="note">${esc(loadErr||'Loading the pool…')}</p>`;return}
   $('howto').textContent=`${isOpen(S.currentWeek)?'Final stretch: pick any two couples':'Pick one couple from each tier'}${S.finaleWeek===S.currentWeek?', plus a champion':''}. Judges' scores decide the week.`;
   $('weekmark').innerHTML=`Season 35<b>Week ${S.currentWeek}</b>${S.locked?'<span class="tag locked">Picks locked</span>':'<span class="tag open">Picks open</span>'}${!S.locked&&lockTime()?`<span class="locks">Locks ${esc(fmtTime(lockTime()))}</span>`:''}`;
-  if(tab==='picks')renderPicks();else if(tab==='standings')renderStandings();else renderAdmin();
+  if(tab==='picks')renderPicks();else if(tab==='standings')renderStandings();else if(tab==='rules')renderRules();else renderAdmin();
   renderRoster();
 }
 function renderRoster(){
@@ -264,6 +266,35 @@ function renderPicks(){
       <p class="note">${saved?`Saved. You can change your picks until ${lockTime()?esc(fmtTime(lockTime())):'the commissioner locks the week'}.`:`${open?'Choose two couples':'Choose one couple in each tier'}${finale?' and a champion':''}, then save.`}</p>`;
   }
   $('main').innerHTML=h;
+}
+function renderRules(){
+  const w=S.currentWeek,bonus=S.champBonus??25,lt=lockTime();
+  const now=isOpen(w)?`This is a final stretch week: pick any two couples.`:`This week has tiers: pick one couple from each.`;
+  $('main').innerHTML=`<div class="rules">
+  <div class="panel"><h2>Joining</h2><ul>
+    <li>Join on the Picks tab with your name and a 4 to 8 digit PIN. Keep the PIN; you need it to sign in and change your picks.</li>
+    <li>Rather text your picks to the commissioner? They can enter them for you.</li></ul></div>
+  <div class="panel"><h2>Each week</h2><ul>
+    <li>The couples still dancing are split into three tiers, top, middle, and bottom, ranked by their season average judges' score so far. Couples without a score yet rank below the rest, in cast order.</li>
+    <li>Pick one couple from each tier. You can change your picks as often as you like until picks lock.</li>
+    <li>Picks lock when the live show starts, Tuesday at 8:00 PM Eastern${lt?` (this week: ${esc(fmtTime(lt))})`:''}. If ABC moves the show, the commissioner moves the lock.</li>
+    <li>Only the picks captured at the lock count. No picks at the lock means no points that week.</li>
+    <li>${now}</li></ul></div>
+  <div class="panel"><h2>Scoring</h2><ul>
+    <li>Each couple earns their combined judges' total for the week, counting every dance they perform that week.</li>
+    <li>Your week is the sum of your couples' totals. Your season is the sum of your weeks.</li>
+    <li>Scores come in automatically after the show from the Scoring chart in Wikipedia's season article. The commissioner can correct any number, and their entry stands.</li>
+    <li>Players with the same season total share a place in the standings.</li></ul></div>
+  <div class="panel"><h2>Eliminations</h2><ul>
+    <li>A couple eliminated in a week still scores for that week's dances.</li>
+    <li>From the next week on, they drop out of the tiers and can't be picked.</li></ul></div>
+  <div class="panel"><h2>Final stretch</h2><ul>
+    <li>Once ${OPEN_AT} or fewer couples remain, the tiers drop. Pick any two different couples.</li>
+    <li>Selecting a third couple replaces the one you picked first.</li></ul></div>
+  <div class="panel"><h2>The finale</h2><ul>
+    <li>In the finale week you also pick a champion, one of the couples still dancing. You can't save your picks without one.</li>
+    <li>If your champion wins, you get ${bonus} bonus points on top of your couples' scores that week.</li></ul></div>
+  </div>`;
 }
 function renderStandings(){
   const{weeks,rows}=standings();
