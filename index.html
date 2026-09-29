@@ -139,7 +139,7 @@ textarea{width:100%;min-height:220px;font-size:.92rem}
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="brand"><h1>Miramar's DWTS Pool</h1><p>Pick one couple from each tier. Judges' scores decide the week.</p></div>
+    <div class="brand"><h1>Miramar's DWTS Pool</h1><p id="howto">Pick one couple from each tier. Judges' scores decide the week.</p></div>
     <div class="weekmark" id="weekmark"></div>
   </header>
   <nav class="tabs" id="tabs" role="tablist"></nav>
@@ -194,6 +194,7 @@ const flashHtml=()=>flash?`<div class="msg ${flash.ok?'ok':''}">${esc(flash.text
 function render(){
   $('tabs').innerHTML=[['picks','Picks'],['standings','Standings'],['admin','Commissioner']].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-tab="${k}">${l}</button>`).join('');
   if(!S){$('main').innerHTML=`<p class="note">${esc(loadErr||'Loading the pool…')}</p>`;return}
+  $('howto').textContent=`${isOpen(S.currentWeek)?'Final stretch: pick any two couples':'Pick one couple from each tier'}${S.finaleWeek===S.currentWeek?', plus a champion':''}. Judges' scores decide the week.`;
   $('weekmark').innerHTML=`Season 35<b>Week ${S.currentWeek}</b>${S.locked?'<span class="tag locked">Picks locked</span>':'<span class="tag open">Picks open</span>'}`;
   if(tab==='picks')renderPicks();else if(tab==='standings')renderStandings();else renderAdmin();
   renderRoster();
