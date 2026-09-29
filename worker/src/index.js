@@ -361,6 +361,14 @@ async function adminAction(env, b) {
       await putKV(env, 'player:' + id, { id, name, pinHash: null, weeks: {} });
       dirty = false; break;
     }
+    case 'resetPin': {
+      // Sets a new PIN for a player who lost theirs; their picks and points are untouched.
+      checkPin(b.pin);
+      const p = await getKV(env, 'player:' + b.id); if (!p) fail(404, 'Player not found.');
+      p.pinHash = await hashPin(p.id, String(b.pin));
+      await putKV(env, 'player:' + p.id, p);
+      dirty = false; break;
+    }
     case 'removePlayer': {
       await env.DB.prepare('DELETE FROM kv WHERE k = ?').bind('player:' + b.id).run();
       dirty = false; break;

@@ -273,6 +273,7 @@ function renderRules(){
   $('main').innerHTML=`<div class="rules">
   <div class="panel"><h2>Joining</h2><ul>
     <li>Join on the Picks tab with your name and a 4 to 8 digit PIN. Keep the PIN; you need it to sign in and change your picks.</li>
+    <li>Lost your PIN? Ask the commissioner to reset it. You keep your picks and points.</li>
     <li>Rather text your picks to the commissioner? They can enter them for you.</li></ul></div>
   <div class="panel"><h2>Each week</h2><ul>
     <li>The couples still dancing are split into three tiers, top, middle, and bottom, ranked by their season average judges' score so far. Couples without a score yet rank below the rest, in cast order.</li>
@@ -344,8 +345,8 @@ function renderAdmin(){
     <p class="note">Enter each couple's combined judges' total for the week, including every dance that week. A couple marked eliminated drops out of the tiers the following week.</p>
     <p class="note">${pullStatus(scoreWeek)}</p>
     <div class="row"><button class="btn" data-act="scores">Save week ${scoreWeek} scores</button><button class="btn ghost" data-act="pull">Pull week ${scoreWeek} from Wikipedia</button></div></div>`;
-  h+=`<div class="panel"><h2>Players</h2><p class="note">Players join themselves from the Picks tab. Add someone here if you'll enter their picks for them.</p>
-    <div class="row">${P.map(p=>`<span class="chip">${esc(p.name)}${p.managed?' (you enter)':''} <button class="btn ghost" style="padding:0 8px;margin-left:4px" data-rmp="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">×</button></span>`).join('')||'<span class="note">No players yet.</span>'}</div>
+  h+=`<div class="panel"><h2>Players</h2><p class="note">Players join themselves from the Picks tab. Add someone here if you'll enter their picks for them. If someone loses their PIN, use Reset PIN and tell them the new one; their picks and points stay.</p>
+    <div class="row">${P.map(p=>`<span class="chip">${esc(p.name)}${p.managed?' (you enter)':''} <button class="btn ghost" style="padding:0 8px;margin-left:4px" data-rpin="${esc(p.id)}" aria-label="Reset PIN for ${esc(p.name)}">${p.managed?'Set PIN':'Reset PIN'}</button><button class="btn ghost" style="padding:0 8px;margin-left:4px" data-rmp="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">×</button></span>`).join('')||'<span class="note">No players yet.</span>'}</div>
     <div class="row" style="margin-top:12px"><input type="text" id="newp" placeholder="Player name" maxlength="40"><button class="btn ghost" data-act="addPlayer">Add player</button></div></div>`;
   const out=S.cast.filter(c=>c.outWeek!=null).sort((a,b)=>a.outWeek-b.outWeek);
   h+=`<div class="panel"><h2>Cast</h2><p class="note">One couple per line as <i>Celebrity | Pro | Photo link</i>. The photo link is optional; couples without one show initials. Before any scores exist, tiers follow this order.</p>
@@ -389,6 +390,9 @@ document.addEventListener('click',e=>{
     },`Week ${S.currentWeek} picks saved.`)}
   if(b.id==='adminLogin'){adminPw=$('apw').value;return run(async()=>{await admin('check');adminOk=true;store.set('bp_admin',adminPw)},'Signed in as commissioner.')}
   if(b.id==='adminLogout'){adminOk=false;adminPw=null;store.set('bp_admin',null);actingAs='self';flash=null;return render()}
+  if(b.dataset.rpin){const p=P.find(x=>x.id===b.dataset.rpin);const pin=(prompt(`New PIN for ${p?.name} (4 to 8 digits):`)||'').trim();if(!pin)return;
+    if(!/^\d{4,8}$/.test(pin)){flash={text:'PIN must be 4 to 8 digits.'};return render()}
+    return run(()=>admin('resetPin',{id:b.dataset.rpin,pin}),`${p?.name}'s PIN is now ${pin}. Let them know; they sign in with their name and the new PIN.`)}
   if(b.dataset.rmp){const p=P.find(x=>x.id===b.dataset.rmp);if(!confirm(`Remove ${p?.name}? Their locked weeks stay in the standings.`))return;
     if(actingAs===b.dataset.rmp)actingAs='self';return run(()=>admin('removePlayer',{id:b.dataset.rmp}),`${p?.name} removed.`)}
   const a=b.dataset.act;if(!a)return;
