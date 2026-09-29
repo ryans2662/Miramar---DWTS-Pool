@@ -298,22 +298,26 @@ function renderRules(){
 }
 function renderStandings(){
   const{weeks,rows}=standings();
-  if(!weeks.length){$('main').innerHTML=`<p class="note">Standings appear once a locked week has judges' scores.</p>`;return}
-  let h=`<div class="scroll"><table><thead><tr><th></th><th>Player</th>${weeks.map(w=>`<th class="num">Wk ${w}</th>`).join('')}<th class="num">Season</th></tr></thead><tbody>`;
-  let prev=null,rank=0;
-  rows.forEach((r,i)=>{if(r.total!==prev){rank=i+1;prev=r.total}
-    h+=`<tr class="${rank===1?'lead':''}"><td class="rank">${rank}</td><td>${esc(r.name)}</td>${weeks.map(w=>`<td class="num">${r.byWeek[w]??'–'}</td>`).join('')}<td class="num total">${r.total}</td></tr>`});
-  h+=`</tbody></table></div>`;
-  const lw=Object.keys(S.locks||{}).map(Number).sort((a,b)=>a-b);
-  if(standWeek==null||!lw.includes(standWeek))standWeek=lw[lw.length-1];
-  h+=`<div class="chips">${lw.map(w=>`<button class="chip" data-sw="${w}" aria-pressed="${w===standWeek}">Week ${w}</button>`).join('')}</div>`;
+  const lw=Object.keys(S.locks||{}).map(Number).sort((a,b)=>b-a);
+  if(!lw.length){$('main').innerHTML=`<p class="note">Standings appear once a locked week has judges' scores.</p>`;return}
+  if(!lw.includes(standWeek))standWeek=null; // null is the cumulative season view
+  const ranks=vals=>{let prev=null,rank=0;return vals.map((v,i)=>{if(v!==prev){rank=i+1;prev=v}return rank})};
+  let h=`<div class="row" style="margin-bottom:16px"><label for="standSel">View</label><select id="standSel"><option value="">Season (cumulative)</option>${lw.map(w=>`<option value="${w}" ${w===standWeek?'selected':''}>Week ${w}</option>`).join('')}</select></div>`;
+  if(standWeek==null){
+    if(!weeks.length){$('main').innerHTML=h+`<p class="note">Season standings appear once a locked week has judges' scores.</p>`;return}
+    const rk=ranks(rows.map(r=>r.total));
+    h+=`<div class="scroll"><table><thead><tr><th></th><th>Player</th>${weeks.map(w=>`<th class="num">Wk ${w}</th>`).join('')}<th class="num">Season</th></tr></thead><tbody>`+
+      rows.map((r,i)=>`<tr class="${rk[i]===1?'lead':''}"><td class="rank">${rk[i]}</td><td>${esc(r.name)}</td>${weeks.map(w=>`<td class="num">${r.byWeek[w]??'–'}</td>`).join('')}<td class="num total">${r.total}</td></tr>`).join('')+`</tbody></table></div>`;
+    $('main').innerHTML=h;return;
+  }
   const L=S.locks[wk(standWeek)]||{},has=!!S.scores[wk(standWeek)];
-  const ent=Object.values(L).sort((a,b)=>weekTotal(standWeek,b)-weekTotal(standWeek,a));
+  const ent=Object.values(L).sort((a,b)=>weekTotal(standWeek,b)-weekTotal(standWeek,a)||a.name.localeCompare(b.name));
+  const rk=ranks(ent.map(p=>weekTotal(standWeek,p)));
   const pk=(id,cls)=>`<span class="pk ${cls}">${cls?'<span class="dot"></span>':''}${esc(castById(id)?.name||'—')}${has?` <b>${pickPts(standWeek,id)}</b>`:''}</span>`;
   const champ=p=>standWeek===S.finaleWeek&&S.champion&&p.champ?`<span class="pk">Champion: ${esc(castById(p.champ)?.name||'—')} <b>+${champPts(standWeek,p)}</b></span>`:'';
-  h+=`<div class="scroll"><table><thead><tr><th>Player</th><th>Picks</th><th class="num">Week</th></tr></thead><tbody>`+
-    ent.map(p=>`<tr><td>${esc(p.name)}</td><td><span class="pks">${Array.isArray(p.open)?p.open.map(id=>pk(id,'')).join(''):TIERS.map(t=>pk(p[t.k],t.cls)).join('')}${champ(p)}</span></td><td class="num total">${has?weekTotal(standWeek,p):'–'}</td></tr>`).join('')+
-    `</tbody></table></div>${has?'':`<p class="note">Scores for week ${standWeek} aren't in yet.</p>`}`;
+  h+=`<div class="scroll"><table><thead><tr><th></th><th>Player</th><th>Picks</th><th class="num">Week ${standWeek}</th></tr></thead><tbody>`+
+    ent.map((p,i)=>`<tr class="${has&&rk[i]===1?'lead':''}"><td class="rank">${has?rk[i]:''}</td><td>${esc(p.name)}</td><td><span class="pks">${Array.isArray(p.open)?p.open.map(id=>pk(id,'')).join(''):TIERS.map(t=>pk(p[t.k],t.cls)).join('')}${champ(p)}</span></td><td class="num total">${has?weekTotal(standWeek,p):'–'}</td></tr>`).join('')+
+    `</tbody></table></div>${ent.length?'':`<p class="note">No one had picks in when week ${standWeek} locked.</p>`}${has?'':`<p class="note">Scores for week ${standWeek} aren't in yet.</p>`}`;
   $('main').innerHTML=h;
 }
 function renderAdmin(){
@@ -372,7 +376,6 @@ document.addEventListener('click',e=>{
   if(b.dataset.open){if(S.locked)return;const id=b.dataset.id,cur=[...(draft.open||currentPick()?.open||[])];
     draft.open=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id].slice(-2);flash=null;renderPicks();return}
   if(b.dataset.champ){if(S.locked)return;draft.champ=b.dataset.id;flash=null;renderPicks();return}
-  if(b.dataset.sw){standWeek=+b.dataset.sw;renderStandings();return}
   if(b.id==='join'||b.id==='login'){
     const name=$('aname').value.trim(),pin=$('apin').value.trim();
     return run(async()=>{const d=await api(b.id==='join'?'/api/join':'/api/login',{name,pin});me={id:d.id,name:d.name,pin};myWeeks=d.weeks||{};store.set('bp_me',me);await refresh()},()=>`Welcome, ${me.name}.`)}
@@ -410,6 +413,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   if(e.target.id==='acting'){actingAs=e.target.value;draft={};flash=null;renderPicks()}
   if(e.target.id==='sw'){scoreWeek=+e.target.value;renderAdmin()}
+  if(e.target.id==='standSel'){standWeek=e.target.value?+e.target.value:null;renderStandings()}
 });
 
 /* ---------- boot ---------- */
