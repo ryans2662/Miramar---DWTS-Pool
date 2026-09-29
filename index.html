@@ -192,7 +192,9 @@ function tiersFor(w){
 }
 const isOpen=w=>activeIn(w).length<=OPEN_AT;
 const pickIds=p=>p?(Array.isArray(p.open)?p.open:[p.top,p.mid,p.low]):[];
-const pickPts=(w,id)=>{const v=S.scores[wk(w)]?.[id];return typeof v==='number'?v:0};
+// A couple eliminated in week w earns their pickers nothing that week.
+const outIn=(w,id)=>castById(id)?.outWeek===+w;
+const pickPts=(w,id)=>{const v=S.scores[wk(w)]?.[id];return typeof v==='number'&&!outIn(w,id)?v:0};
 const champPts=(w,p)=>S.finaleWeek!=null&&+w===S.finaleWeek&&S.champion&&p?.champ===S.champion?(S.champBonus??25):0;
 const weekTotal=(w,p)=>p?pickIds(p).reduce((s,id)=>s+pickPts(w,id),0)+champPts(w,p):0;
 function standings(){
@@ -287,7 +289,7 @@ function renderRules(){
     <li>Scores come in automatically after the show from the Scoring chart in Wikipedia's season article. The commissioner can correct any number, and their entry stands.</li>
     <li>Players with the same season total share a place in the standings.</li></ul></div>
   <div class="panel"><h2>Eliminations</h2><ul>
-    <li>A couple eliminated in a week still scores for that week's dances.</li>
+    <li>If a couple you picked is eliminated that week, you get no points for them that week, whatever the judges scored them.</li>
     <li>From the next week on, they drop out of the tiers and can't be picked.</li></ul></div>
   <div class="panel"><h2>Final stretch</h2><ul>
     <li>Once ${OPEN_AT} or fewer couples remain, the tiers drop. Pick any two different couples.</li>
@@ -314,7 +316,7 @@ function renderStandings(){
   const L=S.locks[wk(standWeek)]||{},has=!!S.scores[wk(standWeek)];
   const ent=Object.values(L).sort((a,b)=>weekTotal(standWeek,b)-weekTotal(standWeek,a)||a.name.localeCompare(b.name));
   const rk=ranks(ent.map(p=>weekTotal(standWeek,p)));
-  const pk=(id,cls)=>`<span class="pk ${cls}">${cls?'<span class="dot"></span>':''}${esc(castById(id)?.name||'—')}${has?` <b>${pickPts(standWeek,id)}</b>`:''}</span>`;
+  const pk=(id,cls)=>`<span class="pk ${cls}">${cls?'<span class="dot"></span>':''}${outIn(standWeek,id)?`<span class="out">${esc(castById(id)?.name||'—')}</span>`:esc(castById(id)?.name||'—')}${has?` <b>${pickPts(standWeek,id)}</b>${outIn(standWeek,id)?' <span class="note">eliminated</span>':''}`:''}</span>`;
   const champ=p=>standWeek===S.finaleWeek&&S.champion&&p.champ?`<span class="pk">Champion: ${esc(castById(p.champ)?.name||'—')} <b>+${champPts(standWeek,p)}</b></span>`:'';
   h+=`<div class="scroll"><table><thead><tr><th></th><th>Player</th><th>Picks</th><th class="num">Week ${standWeek}</th></tr></thead><tbody>`+
     ent.map((p,i)=>`<tr class="${has&&rk[i]===1?'lead':''}"><td class="rank">${has?rk[i]:''}</td><td>${esc(p.name)}</td><td><span class="pks">${Array.isArray(p.open)?p.open.map(id=>pk(id,'')).join(''):TIERS.map(t=>pk(p[t.k],t.cls)).join('')}${champ(p)}</span></td><td class="num total">${has?weekTotal(standWeek,p):'–'}</td></tr>`).join('')+
@@ -342,7 +344,7 @@ function renderAdmin(){
   const act=activeIn(scoreWeek);
   h+=`<div class="panel"><h2>Judges' scores</h2><div class="row" style="margin-bottom:12px"><label for="sw">Week</label><select id="sw">${Array.from({length:w},(_,i)=>i+1).map(x=>`<option ${x===scoreWeek?'selected':''}>${x}</option>`).join('')}</select></div>
     <div class="grid-scores"><span class="h">Couple</span><span class="h">Score</span><span class="h">Eliminated</span>${act.map(c=>`<span>${esc(c.name)}</span><input type="number" min="0" step="1" data-score="${esc(c.id)}" value="${S.scores[wk(scoreWeek)]?.[c.id]??''}" aria-label="Score for ${esc(c.name)}"><input type="checkbox" data-out="${esc(c.id)}" ${c.outWeek===scoreWeek?'checked':''} aria-label="${esc(c.name)} eliminated in week ${scoreWeek}">`).join('')}</div>
-    <p class="note">Enter each couple's combined judges' total for the week, including every dance that week. A couple marked eliminated drops out of the tiers the following week.</p>
+    <p class="note">Enter each couple's combined judges' total for the week, including every dance that week. A couple marked eliminated earns their pickers 0 that week and drops out of the tiers the following week.</p>
     <p class="note">${pullStatus(scoreWeek)}</p>
     <div class="row"><button class="btn" data-act="scores">Save week ${scoreWeek} scores</button><button class="btn ghost" data-act="pull">Pull week ${scoreWeek} from Wikipedia</button></div></div>`;
   h+=`<div class="panel"><h2>Players</h2><p class="note">Players join themselves from the Picks tab. Add someone here if you'll enter their picks for them. If someone loses their PIN, use Reset PIN and tell them the new one; their picks and points stay.</p>
