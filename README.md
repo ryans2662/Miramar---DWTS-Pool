@@ -3,11 +3,11 @@
 Weekly Dancing with the Stars pool. Pick one couple from each tier; judges' scores decide the week; points accumulate over the season.
 
 - `index.html` is the site, hosted on GitHub Pages.
-- `worker/` is the shared backend (Cloudflare Worker + D1) that stores players, picks, and scores.
+- `index.js`, `wrangler.toml`, `schema.sql`, and `seed.sql` are the shared backend (Cloudflare Worker + D1) that stores players, picks, and scores.
 
 ## One-time setup
 
-**1. Deploy the backend** (from the `worker` folder):
+**1. Deploy the backend** (from the repo root):
 
 ```
 npx wrangler login
