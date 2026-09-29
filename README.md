@@ -1,4 +1,4 @@
-# Ballroom Pool
+# Miramar's DWTS Pool
 
 Weekly Dancing with the Stars pool. Pick one couple from each tier; judges' scores decide the week; points accumulate over the season.
 
