@@ -1,6 +1,7 @@
 // Ballroom Pool API — Cloudflare Worker + D1
 // Storage: one table `kv` (k TEXT PRIMARY KEY, v TEXT JSON).
-//   'state'          -> league state {currentWeek, locked, cast, scores, locks, finaleWeek, champion, champBonus, lockAt:{week: ISO|null}}
+//   'state'          -> league state {currentWeek, locked, cast, scores, locks, finaleWeek, champion, champBonus, lockAt:{week: ISO|null},
+//                       lockedAt:{week: ISO}, scoreSource:{week: 'manual'|'wikipedia'}, pull:{week, at, ok, note}}
 //   'player:<id>'    -> {id, name, pinHash|null, weeks:{ "3": {top,mid,low,at} | {open:[id,id],at} (+champ in the finale) }}
 
 const TIERS = ['top', 'mid', 'low'];
@@ -24,6 +25,8 @@ export default {
     }
     return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...cors } });
   },
+  // Cron (wrangler.toml): locks on time even with no visitors, then pulls the week's results.
+  async scheduled(event, env, ctx) { ctx.waitUntil(autoPull(env)); },
 };
 
 const fail = (status, message) => { const e = new Error(message); e.status = status; throw e; };
@@ -52,7 +55,7 @@ async function putKV(env, k, v) {
     .bind(k, JSON.stringify(v)).run();
 }
 async function getState(env) {
-  const S = { finaleWeek: null, champion: null, champBonus: 25, lockAt: {},
+  const S = { finaleWeek: null, champion: null, champBonus: 25, lockAt: {}, lockedAt: {}, scoreSource: {}, pull: null,
     ...((await getKV(env, 'state')) || { currentWeek: 1, locked: false, cast: [], scores: {}, locks: {} }) };
   const w = String(S.currentWeek);
   let dirty = false;
@@ -65,7 +68,7 @@ async function getState(env) {
 async function lockWeek(env, S) {
   const w = String(S.currentWeek), snap = {};
   for (const p of await getPlayers(env)) { const pk = p.weeks?.[w]; if (pk) { const { at, ...pick } = pk; snap[p.id] = { name: p.name, ...pick }; } }
-  S.locks[w] = snap; S.locked = true;
+  S.locks[w] = snap; S.locked = true; S.lockedAt[w] = new Date().toISOString();
 }
 async function getPlayers(env) {
   const { results } = await env.DB.prepare("SELECT v FROM kv WHERE k LIKE 'player:%'").all();
@@ -88,6 +91,124 @@ function nextShowtime(now) {
     const t = new Date(guess - (Date.UTC(g.y, g.m - 1, g.d, g.h, g.min) - guess)); // shift by the zone's UTC offset
     if (t > now) return t;
   }
+}
+
+/* ---------- results from Wikipedia ---------- */
+// The season article's "Scoring chart" holds each couple's weekly judges' total, and marks the
+// eliminated couple's cell. Rows are "Celebrity & Pro" first names; columns are weeks.
+const WIKI_RAW = 'https://en.wikipedia.org/w/index.php?title=Dancing_with_the_Stars_(American_TV_series)_season_35&action=raw';
+
+// Drop every {{template}} whose name is in `names`, handling nested braces.
+function dropTemplates(s, names) {
+  let out = '', i = 0;
+  while (i < s.length) {
+    const m = s.startsWith('{{', i) && /^\{\{\s*([^|}]+)/.exec(s.slice(i));
+    if (m && names.includes(m[1].trim().toLowerCase())) {
+      let depth = 0, j = i;
+      for (; j < s.length; j++) {
+        if (s.startsWith('{{', j)) { depth++; j++; } else if (s.startsWith('}}', j)) { depth--; j++; if (!depth) break; }
+      }
+      i = j + 1; continue;
+    }
+    out += s[i++];
+  }
+  return out;
+}
+// Split "attrs | content" on the first pipe outside {{ }} and [[ ]].
+function splitCell(s) {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s.startsWith('{{', i) || s.startsWith('[[', i)) { depth++; i++; }
+    else if (s.startsWith('}}', i) || s.startsWith(']]', i)) { depth--; i++; }
+    else if (s[i] === '|' && !depth && /=/.test(s.slice(0, i))) return { attrs: s.slice(0, i), text: s.slice(i + 1) };
+  }
+  return { attrs: '', text: s };
+}
+function cleanText(s) {
+  s = s.replace(/<ref[^>]*\/>/g, '').replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '');
+  s = dropTemplates(s, ['efn', 'dagger', 'double-dagger']);
+  s = s.replace(/\{\{\s*(?:fontcolor|nowrap)\s*\|(?:[^|}]*\|)?([^{}]*)\}\}/gi, '$1');
+  return s.replace(/'{2,}/g, '').replace(/\{\{[^{}]*\}\}/g, '').trim();
+}
+function cellValue(t) {
+  t = t.replace(/\s+/g, '');
+  let m = /=(\d+)$/.exec(t); if (m) return +m[1];
+  if (/^\d+(\+\d+)*$/.test(t)) return t.split('+').reduce((a, b) => a + +b, 0);
+  return null;
+}
+function parseScoringChart(raw) {
+  const start = raw.indexOf('== Scoring chart ==');
+  if (start < 0) return null;
+  const end = raw.indexOf('\n|}', start);
+  const lines = raw.slice(start, end).split('\n');
+  const firstRow = lines.findIndex(l => /^!.*scope="row"/.test(l));
+  // Week headers are the column headers whose text is a number, e.g. "[[#Week 1: Premiere|1]]" or "4".
+  const weeks = lines.slice(0, firstRow).filter(l => l.startsWith('!') &&
+    /^\d+$/.test(cleanText(splitCell(l.slice(1)).text).replace(/^\[\[[^|\]]*\|([^\]]*)\]\]$/, '$1'))).length;
+  const rows = [];
+  let cur = null;
+  for (const line of lines.slice(firstRow)) {
+    if (/^!.*scope="row"/.test(line)) {
+      const name = cleanText(splitCell(line.replace(/^!\s*/, '')).text);
+      const [celeb, pro] = name.split('&').map(x => x.trim().split(/\s+/)[0]);
+      cur = { celeb, pro, cells: [] }; rows.push(cur); continue;
+    }
+    if (!cur || !line.startsWith('|') || /^\|[-}+]/.test(line)) continue;
+    const { attrs, text } = splitCell(line.slice(1));
+    const span = +(/colspan="?(\d+)/.exec(attrs)?.[1] || 1);
+    const cell = { v: cellValue(cleanText(text)), out: /f4c7b8/i.test(attrs) || /eliminat|withdr/i.test(text) };
+    for (let k = 0; k < span; k++) cur.cells.push(k ? { v: null, out: false } : cell);
+  }
+  for (const r of rows) r.cells = r.cells.slice(-weeks); // drops the Place column
+  return { weeks, rows };
+}
+// A week's results for the pool, or a reason they are not ready.
+function resultsFor(S, chart, w) {
+  if (!chart || w > chart.weeks) return { error: 'The scoring chart could not be read.' };
+  const first = s => String(s || '').split(/\s+/)[0].toLowerCase();
+  const scores = {}, out = [], missing = [];
+  for (const c of activeIn(S, w)) {
+    const r = chart.rows.find(r => first(r.celeb) === first(c.name) && first(r.pro) === first(c.pro));
+    const cell = r?.cells[w - 1];
+    if (!cell || cell.v == null || cell.v < 0 || cell.v > 200) { missing.push(c.name); continue; }
+    scores[c.id] = cell.v;
+    if (cell.out) out.push(c.id);
+  }
+  if (missing.length) return { error: `No week ${w} score yet for ${missing.join(', ')}.` };
+  return { scores, out };
+}
+async function fetchChart() {
+  try {
+    const r = await fetch(WIKI_RAW, { headers: { 'user-agent': 'miramar-dwts-pool/1.0 (private office pool; ballroom-pool.ryans2662.workers.dev)' } });
+    if (!r.ok) return { error: `Wikipedia returned ${r.status}.` };
+    return parseScoringChart(await r.text()) || { error: 'The scoring chart could not be read.' };
+  } catch { return { error: 'Could not reach Wikipedia.' }; }
+}
+function applyScores(S, wk, sc, outIds) {
+  if (Object.keys(sc).length) S.scores[wk] = sc; else delete S.scores[wk];
+  const out = new Set(outIds);
+  for (const c of S.cast) { if (out.has(c.id)) c.outWeek = wk; else if (c.outWeek === wk) c.outWeek = null; }
+}
+// Applies Wikipedia's results for week wk to S when every couple still dancing has a score.
+async function pullResults(S, wk, chart) {
+  chart ??= await fetchChart();
+  const r = chart.error ? chart : resultsFor(S, chart, wk);
+  S.pull = { week: wk, at: new Date().toISOString(), ok: !r.error, note: r.error || null };
+  if (r.error) return r;
+  applyScores(S, wk, r.scores, r.out);
+  S.scoreSource[wk] = 'wikipedia';
+  return r;
+}
+const PULL_FOR_MS = 48 * 3600e3; // keep picking up Wikipedia corrections for two days after the lock
+async function autoPull(env) {
+  const due = S => S.locked && S.scoreSource[S.currentWeek] !== 'manual' &&
+    !(S.lockedAt[S.currentWeek] && Date.now() - Date.parse(S.lockedAt[S.currentWeek]) > PULL_FOR_MS);
+  if (!due(await getState(env))) return; // getState also locks the week once its showtime passes
+  const chart = await fetchChart();
+  const S = await getState(env); // re-read so a commissioner change made during the fetch is kept
+  if (!due(S)) return;
+  await pullResults(S, S.currentWeek, chart);
+  await putKV(env, 'state', S);
 }
 
 /* ---------- league logic (mirrors the page) ---------- */
@@ -199,9 +320,14 @@ async function adminAction(env, b) {
       const wk = Number(b.week); if (!(wk >= 1 && wk <= S.currentWeek)) fail(400, 'Bad week.');
       const sc = {};
       for (const [id, v] of Object.entries(b.scores || {})) if (typeof v === 'number' && isFinite(v)) sc[id] = v;
-      if (Object.keys(sc).length) S.scores[wk] = sc; else delete S.scores[wk];
-      const out = new Set(b.out || []);
-      for (const c of S.cast) { if (out.has(c.id)) c.outWeek = wk; else if (c.outWeek === wk) c.outWeek = null; }
+      applyScores(S, wk, sc, b.out || []);
+      S.scoreSource[wk] = 'manual'; // hand-entered scores are never overwritten by the automatic pull
+      break;
+    }
+    case 'pull': {
+      const wk = Number(b.week); if (!(wk >= 1 && wk <= S.currentWeek)) fail(400, 'Bad week.');
+      const r = await pullResults(S, wk);
+      if (r.error) fail(409, r.error);
       break;
     }
     case 'cast': {

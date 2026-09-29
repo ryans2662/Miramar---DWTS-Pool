@@ -162,6 +162,13 @@ const $=id=>document.getElementById(id);
 const wk=w=>String(w);
 const castById=id=>S.cast.find(c=>c.id===id);
 const lockTime=()=>S.lockAt?.[wk(S.currentWeek)]||null;
+function pullStatus(w){
+  const src=S.scoreSource?.[wk(w)],last=S.pull?.week===w?S.pull:null;
+  if(src==='manual')return`Week ${w} scores were entered by hand, so automatic updates are off for this week. Pull from Wikipedia to turn them back on.`;
+  if(src==='wikipedia')return`Week ${w} scores came from Wikipedia's season article${last?.ok?`, last checked ${esc(fmtTime(last.at))}`:''}. They keep updating for two days after the lock in case of corrections.`;
+  if(last&&!last.ok)return`Waiting for week ${w} results from Wikipedia (checked ${esc(fmtTime(last.at))}): ${esc(last.note)}`;
+  return`Once week ${w} is locked, scores and eliminations fill in automatically from Wikipedia's season article, checked every 15 minutes.`;
+}
 const fmtTime=iso=>new Date(iso).toLocaleString([],{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
 const localInput=iso=>{const d=new Date(iso);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)};
 
@@ -300,7 +307,8 @@ function renderAdmin(){
   h+=`<div class="panel"><h2>Judges' scores</h2><div class="row" style="margin-bottom:12px"><label for="sw">Week</label><select id="sw">${Array.from({length:w},(_,i)=>i+1).map(x=>`<option ${x===scoreWeek?'selected':''}>${x}</option>`).join('')}</select></div>
     <div class="grid-scores"><span class="h">Couple</span><span class="h">Score</span><span class="h">Eliminated</span>${act.map(c=>`<span>${esc(c.name)}</span><input type="number" min="0" step="1" data-score="${esc(c.id)}" value="${S.scores[wk(scoreWeek)]?.[c.id]??''}" aria-label="Score for ${esc(c.name)}"><input type="checkbox" data-out="${esc(c.id)}" ${c.outWeek===scoreWeek?'checked':''} aria-label="${esc(c.name)} eliminated in week ${scoreWeek}">`).join('')}</div>
     <p class="note">Enter each couple's combined judges' total for the week, including every dance that week. A couple marked eliminated drops out of the tiers the following week.</p>
-    <button class="btn" data-act="scores">Save week ${scoreWeek} scores</button></div>`;
+    <p class="note">${pullStatus(scoreWeek)}</p>
+    <div class="row"><button class="btn" data-act="scores">Save week ${scoreWeek} scores</button><button class="btn ghost" data-act="pull">Pull week ${scoreWeek} from Wikipedia</button></div></div>`;
   h+=`<div class="panel"><h2>Players</h2><p class="note">Players join themselves from the Picks tab. Add someone here if you'll enter their picks for them.</p>
     <div class="row">${P.map(p=>`<span class="chip">${esc(p.name)}${p.managed?' (you enter)':''} <button class="btn ghost" style="padding:0 8px;margin-left:4px" data-rmp="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">×</button></span>`).join('')||'<span class="note">No players yet.</span>'}</div>
     <div class="row" style="margin-top:12px"><input type="text" id="newp" placeholder="Player name" maxlength="40"><button class="btn ghost" data-act="addPlayer">Add player</button></div></div>`;
@@ -356,6 +364,7 @@ document.addEventListener('click',e=>{
   if(a==='lockManual')return run(()=>admin('lockAt',{at:null}),'Automatic lock turned off for this week.');
   if(a==='nextWeek'){if(!S.scores[wk(S.currentWeek)]&&!confirm(`Week ${S.currentWeek} has no scores yet. Start week ${S.currentWeek+1} anyway?`))return;
     return run(async()=>{await admin('nextWeek');scoreWeek=S.currentWeek;draft={}},()=>`Week ${S.currentWeek} is open for picks.`)}
+  if(a==='pull')return run(()=>admin('pull',{week:scoreWeek}),`Week ${scoreWeek} results pulled from Wikipedia.`);
   if(a==='scores'){const scores={},out=[];
     document.querySelectorAll('[data-score]').forEach(i=>{if(i.value!=='')scores[i.dataset.score]=Number(i.value)});
     document.querySelectorAll('[data-out]').forEach(i=>{if(i.checked)out.push(i.dataset.out)});

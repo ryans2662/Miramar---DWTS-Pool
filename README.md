@@ -27,7 +27,7 @@ npx wrangler deploy                           # prints your Worker URL
 ## Weekly routine (Commissioner tab)
 
 1. Picks lock automatically when the live show starts (Tuesday 8:00 PM Eastern by default). For a special week, change the time in the Week panel, or lock by hand.
-2. After the show, enter each couple's judges' total and check who was eliminated.
+2. After the show, scores and eliminations fill in automatically from the Scoring chart in Wikipedia's season article, checked every 15 minutes once the week is locked (and for two days after, to pick up corrections). To fix a number, edit it and save; hand-entered weeks are never overwritten. "Pull from Wikipedia" fetches right away and turns automatic updates back on.
 3. Start the next week. Tiers rebuild from season average automatically, and switch to the final stretch on their own once 6 or fewer couples remain.
 
 **Finale week.** Right after starting the finale week, before anyone picks, tick "Week N is the finale" in the Week panel, set the champion bonus (25 by default), and save finale settings. Players must then pick a champion along with their couples. After the show, choose the winner under Champion and save again; everyone who picked them gets the bonus added to that week.

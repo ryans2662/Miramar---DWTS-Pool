@@ -10,3 +10,7 @@ ALLOWED_ORIGIN = "https://ryans2662.github.io"
 binding = "DB"
 database_name = "ballroom-pool"
 database_id = "47fb3e15-ef48-48ce-a3e2-751de0ceb6f1"
+
+# Every 15 minutes: lock picks at showtime even with no visitors, then pull the week's results from Wikipedia.
+[triggers]
+crons = ["*/15 * * * *"]
