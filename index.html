@@ -101,6 +101,9 @@ tr:last-child td{border-bottom:0}
 h3{font:700 1.3rem var(--display);margin:30px 0 10px}
 .pk{display:inline-flex;align-items:center;gap:6px}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--tc)}
+.pks{display:flex;gap:6px 16px;flex-wrap:wrap}
+.tiers.one{grid-template-columns:1fr}
+.t-open{--tc:var(--rose);--ts:var(--rose-soft)}
 
 /* admin */
 .panel{background:var(--paper);border-radius:14px;padding:18px;margin-bottom:18px}
@@ -148,6 +151,7 @@ textarea{width:100%;min-height:220px;font-size:.92rem}
    const API='https://ballroom-pool.ryans2662.workers.dev';
 
 const TIERS=[{k:'top',label:'Top tier',cls:'t-top'},{k:'mid',label:'Middle tier',cls:'t-mid'},{k:'low',label:'Bottom tier',cls:'t-low'}];
+const OPEN_AT=6; // at or below this many active couples, tiers drop and players pick any two
 const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,JSON.stringify(v))}catch{}}};
 let S=null,P=[],me=store.get('bp_me'),myWeeks={},adminPw=store.get('bp_admin'),adminOk=false,adminPicks={};
 let tab='picks',actingAs='self',draft={},flash=null,standWeek=null,scoreWeek=null,busy=false,loadErr=null;
@@ -173,8 +177,11 @@ function tiersFor(w){
   const n=act.length,t=Math.ceil(n/3),m=Math.ceil((n-t)/2);
   return{top:act.slice(0,t),mid:act.slice(t,t+m),low:act.slice(t+m)};
 }
+const isOpen=w=>activeIn(w).length<=OPEN_AT;
+const pickIds=p=>p?(Array.isArray(p.open)?p.open:[p.top,p.mid,p.low]):[];
 const pickPts=(w,id)=>{const v=S.scores[wk(w)]?.[id];return typeof v==='number'?v:0};
-const weekTotal=(w,p)=>p?pickPts(w,p.top)+pickPts(w,p.mid)+pickPts(w,p.low):0;
+const champPts=(w,p)=>S.finaleWeek!=null&&+w===S.finaleWeek&&S.champion&&p?.champ===S.champion?(S.champBonus??25):0;
+const weekTotal=(w,p)=>p?pickIds(p).reduce((s,id)=>s+pickPts(w,id),0)+champPts(w,p):0;
 function standings(){
   const weeks=Object.keys(S.locks||{}).map(Number).filter(w=>S.scores[wk(w)]).sort((a,b)=>a-b),rows={};
   for(const w of weeks)for(const [key,p] of Object.entries(S.locks[wk(w)])){
@@ -226,17 +233,23 @@ function renderPicks(){
     h+=`<div class="row" style="margin-bottom:16px"><label for="acting">Entering picks for</label><select id="acting"><option value="self">${me?'Myself':'Nobody (browse)'}</option>${P.map(p=>`<option value="${esc(p.id)}" ${actingAs===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`;
   }
   if(S.locked)h+=`<div class="msg">Week ${w} picks are locked. ${lockedPick?'Your picks are highlighted below.':'Scores post after the show.'}</div>`;
-  h+=`<div class="tiers">`+TIERS.map(t=>`<section class="tier ${t.cls}"><h2>${t.label}</h2><div class="sub">${T[t.k].length} couples, ranked by season average</div>`+
-    T[t.k].map(x=>`<button class="opt" data-tier="${t.k}" data-id="${esc(x.c.id)}" aria-pressed="${sel[t.k]===x.c.id}" ${canPick?'':'disabled'}>
+  const open=isOpen(w),finale=S.finaleWeek===w,ranked=[...T.top,...T.mid,...T.low];
+  const opt=(x,attr,on)=>`<button class="opt" ${attr} data-id="${esc(x.c.id)}" aria-pressed="${on}" ${canPick?'':'disabled'}>
       <span class="av" aria-hidden="true">${esc(initials(x.c.name))}${safeImg(x.c.photo)?`<img src="${esc(x.c.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:''}</span>
       <span class="who"><b>${esc(x.c.name)}</b><span>${esc(x.c.pro||'')}</span></span>
-      <span class="paddle ${x.avg==null?'none':''}" title="Season average">${x.avg==null?'new':x.avg.toFixed(1)}</span></button>`).join('')+`</section>`).join('')+`</div>`;
+      <span class="paddle ${x.avg==null?'none':''}" title="Season average">${x.avg==null?'new':x.avg.toFixed(1)}</span></button>`;
+  if(open)h+=`<div class="tiers one"><section class="tier t-open"><h2>Final stretch</h2><div class="sub">${ranked.length} couples left. Pick any two.</div>`+
+    ranked.map(x=>opt(x,'data-open="1"',(sel.open||[]).includes(x.c.id))).join('')+`</section></div>`;
+  else h+=`<div class="tiers">`+TIERS.map(t=>`<section class="tier ${t.cls}"><h2>${t.label}</h2><div class="sub">${T[t.k].length} couples, ranked by season average</div>`+
+    T[t.k].map(x=>opt(x,`data-tier="${t.k}"`,sel[t.k]===x.c.id)).join('')+`</section>`).join('')+`</div>`;
+  if(finale)h+=`<div class="tiers one"><section class="tier t-top"><h2>Pick the champion</h2><div class="sub">Worth ${S.champBonus??25} bonus points if they win the finale.</div>`+
+    ranked.map(x=>opt(x,'data-champ="1"',sel.champ===x.c.id)).join('')+`</section></div>`;
   if(canPick){
-    const complete=TIERS.every(t=>sel[t.k]);
+    const complete=(open?(sel.open||[]).length===2:TIERS.every(t=>sel[t.k]))&&(!finale||!!sel.champ);
     const nm=actingAs==='self'?me.name:(P.find(p=>p.id===actingAs)?.name||'');
     h+=`<div class="submitbar"><span style="flex:1">${actingAs==='self'?'Your picks':'Picks for <b>'+esc(nm)+'</b>'}</span>
       <button class="btn rose" id="savePicks" ${!complete||busy?'disabled':''}>${saved?'Update picks':'Save picks'}</button></div>
-      <p class="note">${saved?'Saved. You can change your picks until the commissioner locks the week.':'Choose one couple in each tier, then save.'}</p>`;
+      <p class="note">${saved?'Saved. You can change your picks until the commissioner locks the week.':`${open?'Choose two couples':'Choose one couple in each tier'}${finale?' and a champion':''}, then save.`}</p>`;
   }
   $('main').innerHTML=h;
 }
@@ -253,8 +266,10 @@ function renderStandings(){
   h+=`<div class="chips">${lw.map(w=>`<button class="chip" data-sw="${w}" aria-pressed="${w===standWeek}">Week ${w}</button>`).join('')}</div>`;
   const L=S.locks[wk(standWeek)]||{},has=!!S.scores[wk(standWeek)];
   const ent=Object.values(L).sort((a,b)=>weekTotal(standWeek,b)-weekTotal(standWeek,a));
-  h+=`<div class="scroll"><table><thead><tr><th>Player</th>${TIERS.map(t=>`<th>${t.label}</th>`).join('')}<th class="num">Week</th></tr></thead><tbody>`+
-    ent.map(p=>`<tr><td>${esc(p.name)}</td>${TIERS.map(t=>{const c=castById(p[t.k]);return`<td><span class="pk ${t.cls}"><span class="dot"></span>${esc(c?.name||'—')}${has?` <b>${pickPts(standWeek,p[t.k])}</b>`:''}</span></td>`}).join('')}<td class="num total">${has?weekTotal(standWeek,p):'–'}</td></tr>`).join('')+
+  const pk=(id,cls)=>`<span class="pk ${cls}">${cls?'<span class="dot"></span>':''}${esc(castById(id)?.name||'—')}${has?` <b>${pickPts(standWeek,id)}</b>`:''}</span>`;
+  const champ=p=>standWeek===S.finaleWeek&&S.champion&&p.champ?`<span class="pk">Champion: ${esc(castById(p.champ)?.name||'—')} <b>+${champPts(standWeek,p)}</b></span>`:'';
+  h+=`<div class="scroll"><table><thead><tr><th>Player</th><th>Picks</th><th class="num">Week</th></tr></thead><tbody>`+
+    ent.map(p=>`<tr><td>${esc(p.name)}</td><td><span class="pks">${Array.isArray(p.open)?p.open.map(id=>pk(id,'')).join(''):TIERS.map(t=>pk(p[t.k],t.cls)).join('')}${champ(p)}</span></td><td class="num total">${has?weekTotal(standWeek,p):'–'}</td></tr>`).join('')+
     `</tbody></table></div>${has?'':`<p class="note">Scores for week ${standWeek} aren't in yet.</p>`}`;
   $('main').innerHTML=h;
 }
@@ -267,7 +282,12 @@ function renderAdmin(){
   h+=`<div class="panel"><h2>Week ${w}</h2>
     <p>${S.locked?`Picks are locked. ${Object.keys(S.locks[wk(w)]||{}).length} entries captured.`:`${subs.length} of ${P.length} players have picked${subs.length?': '+subs.map(esc).join(', '):''}.`}</p>
     <div class="row">${S.locked?`<button class="btn ghost" data-act="unlock">Reopen picks</button><button class="btn" data-act="nextWeek">Start week ${w+1}</button>`:`<button class="btn rose" data-act="lock">Lock picks</button>`}</div>
-    <p class="note">Lock before the show starts. Locking captures everyone's picks at that moment; scoring uses only what was captured.</p></div>`;
+    <p class="note">Lock before the show starts. Locking captures everyone's picks at that moment; scoring uses only what was captured.</p>
+    <div class="row" style="margin-top:14px"><label><input type="checkbox" id="finaleChk" ${S.finaleWeek===w?'checked':''} ${S.locked?'disabled':''}> Week ${w} is the finale</label>
+      <label>Champion bonus <input type="number" id="champBonus" min="0" step="1" value="${S.champBonus??25}"></label>
+      ${S.finaleWeek!=null?`<label>Champion <select id="champSel"><option value="">Not decided</option>${activeIn(S.finaleWeek).map(c=>`<option value="${esc(c.id)}" ${S.champion===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label>`:''}
+      <button class="btn ghost" data-act="finale">Save finale settings</button></div>
+    <p class="note">${S.finaleWeek!=null?`Week ${S.finaleWeek} is the finale. Players also pick a champion; a correct pick adds the bonus to that week.`:'Mark the finale week before opening picks so players can choose a champion.'}${S.locked?' The finale week can only be changed while picks are open.':''}</p></div>`;
   const act=activeIn(scoreWeek);
   h+=`<div class="panel"><h2>Judges' scores</h2><div class="row" style="margin-bottom:12px"><label for="sw">Week</label><select id="sw">${Array.from({length:w},(_,i)=>i+1).map(x=>`<option ${x===scoreWeek?'selected':''}>${x}</option>`).join('')}</select></div>
     <div class="grid-scores"><span class="h">Couple</span><span class="h">Score</span><span class="h">Eliminated</span>${act.map(c=>`<span>${esc(c.name)}</span><input type="number" min="0" step="1" data-score="${esc(c.id)}" value="${S.scores[wk(scoreWeek)]?.[c.id]??''}" aria-label="Score for ${esc(c.name)}"><input type="checkbox" data-out="${esc(c.id)}" ${c.outWeek===scoreWeek?'checked':''} aria-label="${esc(c.name)} eliminated in week ${scoreWeek}">`).join('')}</div>
@@ -302,6 +322,9 @@ document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.tab){tab=b.dataset.tab;flash=null;render();return}
   if(b.dataset.tier){if(S.locked)return;draft[b.dataset.tier]=b.dataset.id;flash=null;renderPicks();return}
+  if(b.dataset.open){if(S.locked)return;const id=b.dataset.id,cur=[...(draft.open||currentPick()?.open||[])];
+    draft.open=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id].slice(-2);flash=null;renderPicks();return}
+  if(b.dataset.champ){if(S.locked)return;draft.champ=b.dataset.id;flash=null;renderPicks();return}
   if(b.dataset.sw){standWeek=+b.dataset.sw;renderStandings();return}
   if(b.id==='join'||b.id==='login'){
     const name=$('aname').value.trim(),pin=$('apin').value.trim();
@@ -327,6 +350,9 @@ document.addEventListener('click',e=>{
     document.querySelectorAll('[data-score]').forEach(i=>{if(i.value!=='')scores[i.dataset.score]=Number(i.value)});
     document.querySelectorAll('[data-out]').forEach(i=>{if(i.checked)out.push(i.dataset.out)});
     return run(()=>admin('scores',{week:scoreWeek,scores,out}),`Week ${scoreWeek} scores saved.`)}
+  if(a==='finale'){const extra={},bv=$('champBonus').value.trim();if(bv!=='')extra.bonus=Number(bv);if(!S.locked)extra.isFinale=$('finaleChk').checked;
+    if($('champSel'))extra.champion=$('champSel').value||null;
+    return run(()=>admin('finale',extra),'Finale settings saved.')}
   if(a==='addPlayer'){const name=$('newp').value.trim();if(!name)return;return run(()=>admin('addPlayer',{name}),`${name} added.`)}
   if(a==='cast'){const cast=$('castTxt').value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{const[name,pro,photo]=l.split('|').map(s=>s.trim());return{name,pro,photo}});
     return run(()=>admin('cast',{cast}),()=>`Cast saved: ${S.cast.length} couples.`)}

@@ -1,9 +1,10 @@
 // Ballroom Pool API — Cloudflare Worker + D1
 // Storage: one table `kv` (k TEXT PRIMARY KEY, v TEXT JSON).
-//   'state'          -> league state {currentWeek, locked, cast, scores, locks}
-//   'player:<id>'    -> {id, name, pinHash|null, weeks:{ "3": {top,mid,low,at} }}
+//   'state'          -> league state {currentWeek, locked, cast, scores, locks, finaleWeek, champion, champBonus}
+//   'player:<id>'    -> {id, name, pinHash|null, weeks:{ "3": {top,mid,low,at} | {open:[id,id],at} (+champ in the finale) }}
 
 const TIERS = ['top', 'mid', 'low'];
+const OPEN_AT = 6; // at or below this many active couples, tiers drop and players pick any two
 
 export default {
   async fetch(req, env) {
@@ -51,7 +52,8 @@ async function putKV(env, k, v) {
     .bind(k, JSON.stringify(v)).run();
 }
 async function getState(env) {
-  return (await getKV(env, 'state')) || { currentWeek: 1, locked: false, cast: [], scores: {}, locks: {} };
+  const S = (await getKV(env, 'state')) || { currentWeek: 1, locked: false, cast: [], scores: {}, locks: {} };
+  return { finaleWeek: null, champion: null, champBonus: 25, ...S };
 }
 async function getPlayers(env) {
   const { results } = await env.DB.prepare("SELECT v FROM kv WHERE k LIKE 'player:%'").all();
@@ -76,9 +78,23 @@ function tiersFor(S, w) {
   return { top: ids.slice(0, t), mid: ids.slice(t, t + m), low: ids.slice(t + m) };
 }
 function validatePick(S, pick) {
-  const T = tiersFor(S, S.currentWeek);
-  for (const k of TIERS) if (!pick?.[k] || !T[k].includes(pick[k])) fail(400, 'Each pick must come from its tier for this week.');
-  return { top: pick.top, mid: pick.mid, low: pick.low, at: new Date().toISOString() };
+  const w = S.currentWeek, act = activeIn(S, w).map(c => c.id);
+  let out;
+  if (act.length <= OPEN_AT) {
+    const o = pick?.open;
+    if (!Array.isArray(o) || o.length !== 2 || o[0] === o[1] || !o.every(id => act.includes(id)))
+      fail(400, 'Pick two different couples still in the competition.');
+    out = { open: [o[0], o[1]] };
+  } else {
+    const T = tiersFor(S, w);
+    for (const k of TIERS) if (!pick?.[k] || !T[k].includes(pick[k])) fail(400, 'Each pick must come from its tier for this week.');
+    out = { top: pick.top, mid: pick.mid, low: pick.low };
+  }
+  if (S.finaleWeek === w) {
+    if (!act.includes(pick?.champ)) fail(400, 'Pick a champion for the finale.');
+    out.champ = pick.champ;
+  }
+  return { ...out, at: new Date().toISOString() };
 }
 
 /* ---------- players ---------- */
@@ -139,7 +155,7 @@ async function adminAction(env, b) {
     case 'check': dirty = false; break;
     case 'lock': {
       const snap = {};
-      for (const p of await getPlayers(env)) { const pk = p.weeks?.[w]; if (pk) snap[p.id] = { name: p.name, top: pk.top, mid: pk.mid, low: pk.low }; }
+      for (const p of await getPlayers(env)) { const pk = p.weeks?.[w]; if (pk) { const { at, ...pick } = pk; snap[p.id] = { name: p.name, ...pick }; } }
       S.locks[w] = snap; S.locked = true; break;
     }
     case 'unlock': S.locked = false; break;
@@ -156,8 +172,25 @@ async function adminAction(env, b) {
     case 'cast': {
       const old = Object.fromEntries(S.cast.map(c => [c.id, c]));
       S.cast = (b.cast || []).filter(c => c?.name).map(c => {
-        const id = slug(c.name); return { id, name: String(c.name).slice(0, 60), pro: String(c.pro || '').slice(0, 60), outWeek: old[id]?.outWeek ?? null };
+        const id = slug(c.name), photo = String(c.photo || '');
+        return { id, name: String(c.name).slice(0, 60), pro: String(c.pro || '').slice(0, 60),
+          photo: photo.length <= 500 && /^https:\/\/[^\s"'<>]+$/.test(photo) ? photo : '', outWeek: old[id]?.outWeek ?? null };
       });
+      break;
+    }
+    case 'finale': {
+      if (b.isFinale != null && !S.locked) {
+        if (b.isFinale) S.finaleWeek = S.currentWeek;
+        else if (S.finaleWeek === S.currentWeek) S.finaleWeek = null;
+      }
+      if (b.bonus != null) {
+        const n = Number(b.bonus); if (!(isFinite(n) && n >= 0)) fail(400, 'Bonus must be zero or more.');
+        S.champBonus = Math.round(n);
+      }
+      if (b.champion !== undefined) {
+        if (b.champion !== null && !S.cast.some(c => c.id === b.champion)) fail(400, 'Unknown champion.');
+        S.champion = b.champion;
+      }
       break;
     }
     case 'addPlayer': {
