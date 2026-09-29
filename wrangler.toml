@@ -4,9 +4,9 @@ compatibility_date = "2026-09-01"
 
 [vars]
 # Set to your GitHub Pages origin once you know it, e.g. "https://yourname.github.io"
-ALLOWED_ORIGIN = "*"
+ALLOWED_ORIGIN = "https://ryans2662.github.io"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "ballroom-pool"
-database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+database_id = "47fb3e15-ef48-48ce-a3e2-751de0ceb6f1"
