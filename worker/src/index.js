@@ -1,6 +1,6 @@
 // Ballroom Pool API — Cloudflare Worker + D1
 // Storage: one table `kv` (k TEXT PRIMARY KEY, v TEXT JSON).
-//   'state'          -> league state {currentWeek, locked, cast, scores, locks, finaleWeek, champion, champBonus}
+//   'state'          -> league state {currentWeek, locked, cast, scores, locks, finaleWeek, champion, champBonus, lockAt:{week: ISO|null}}
 //   'player:<id>'    -> {id, name, pinHash|null, weeks:{ "3": {top,mid,low,at} | {open:[id,id],at} (+champ in the finale) }}
 
 const TIERS = ['top', 'mid', 'low'];
@@ -52,12 +52,42 @@ async function putKV(env, k, v) {
     .bind(k, JSON.stringify(v)).run();
 }
 async function getState(env) {
-  const S = (await getKV(env, 'state')) || { currentWeek: 1, locked: false, cast: [], scores: {}, locks: {} };
-  return { finaleWeek: null, champion: null, champBonus: 25, ...S };
+  const S = { finaleWeek: null, champion: null, champBonus: 25, lockAt: {},
+    ...((await getKV(env, 'state')) || { currentWeek: 1, locked: false, cast: [], scores: {}, locks: {} }) };
+  const w = String(S.currentWeek);
+  let dirty = false;
+  // A week with no lock time yet gets the next live show; null means the commissioner locks by hand.
+  if (!(w in S.lockAt)) { S.lockAt[w] = nextShowtime(new Date()).toISOString(); dirty = true; }
+  if (!S.locked && S.lockAt[w] && Date.now() >= Date.parse(S.lockAt[w])) { await lockWeek(env, S); dirty = true; }
+  if (dirty) await putKV(env, 'state', S);
+  return S;
+}
+async function lockWeek(env, S) {
+  const w = String(S.currentWeek), snap = {};
+  for (const p of await getPlayers(env)) { const pk = p.weeks?.[w]; if (pk) { const { at, ...pick } = pk; snap[p.id] = { name: p.name, ...pick }; } }
+  S.locks[w] = snap; S.locked = true;
 }
 async function getPlayers(env) {
   const { results } = await env.DB.prepare("SELECT v FROM kv WHERE k LIKE 'player:%'").all();
   return results.map(r => JSON.parse(r.v));
+}
+
+/* ---------- showtime ---------- */
+// Season 35 airs live coast to coast on Tuesdays at 8:00 PM Eastern.
+const SHOW = { day: 'Tue', hour: 20, tz: 'America/New_York' };
+function zoned(date, tz) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', weekday: 'short',
+    year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' }).formatToParts(date).map(x => [x.type, x.value]));
+  return { y: +p.year, m: +p.month, d: +p.day, h: +p.hour, min: +p.minute, day: p.weekday };
+}
+function nextShowtime(now) {
+  for (let i = 0; i < 8; i++) {
+    const z = zoned(new Date(now.getTime() + i * 86400000), SHOW.tz);
+    if (z.day !== SHOW.day) continue;
+    const guess = Date.UTC(z.y, z.m - 1, z.d, SHOW.hour), g = zoned(new Date(guess), SHOW.tz);
+    const t = new Date(guess - (Date.UTC(g.y, g.m - 1, g.d, g.h, g.min) - guess)); // shift by the zone's UTC offset
+    if (t > now) return t;
+  }
 }
 
 /* ---------- league logic (mirrors the page) ---------- */
@@ -153,13 +183,18 @@ async function adminAction(env, b) {
   let dirty = true;
   switch (b.action) {
     case 'check': dirty = false; break;
-    case 'lock': {
-      const snap = {};
-      for (const p of await getPlayers(env)) { const pk = p.weeks?.[w]; if (pk) { const { at, ...pick } = pk; snap[p.id] = { name: p.name, ...pick }; } }
-      S.locks[w] = snap; S.locked = true; break;
+    case 'lock': await lockWeek(env, S); break;
+    case 'unlock': {
+      S.locked = false;
+      if (S.lockAt[w] && Date.now() >= Date.parse(S.lockAt[w])) S.lockAt[w] = null; // a passed lock time would relock at once
+      break;
     }
-    case 'unlock': S.locked = false; break;
-    case 'nextWeek': S.currentWeek += 1; S.locked = false; break;
+    case 'nextWeek': S.currentWeek += 1; S.locked = false; S.lockAt[S.currentWeek] = nextShowtime(new Date()).toISOString(); break;
+    case 'lockAt': {
+      if (b.at !== null && !isFinite(Date.parse(b.at))) fail(400, 'Bad lock time.');
+      S.lockAt[w] = b.at === null ? null : new Date(b.at).toISOString();
+      break;
+    }
     case 'scores': {
       const wk = Number(b.week); if (!(wk >= 1 && wk <= S.currentWeek)) fail(400, 'Bad week.');
       const sc = {};

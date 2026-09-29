@@ -26,7 +26,7 @@ npx wrangler deploy                           # prints your Worker URL
 
 ## Weekly routine (Commissioner tab)
 
-1. Lock picks before the show starts.
+1. Picks lock automatically when the live show starts (Tuesday 8:00 PM Eastern by default). For a special week, change the time in the Week panel, or lock by hand.
 2. After the show, enter each couple's judges' total and check who was eliminated.
 3. Start the next week. Tiers rebuild from season average automatically, and switch to the final stretch on their own once 6 or fewer couples remain.
 

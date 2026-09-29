@@ -114,6 +114,7 @@ textarea{width:100%;min-height:220px;font-size:.92rem}
 .tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.8rem;font-weight:600}
 .tag.open{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
 .tag.locked{background:var(--rose-soft);color:var(--rose)}
+.weekmark .locks{display:block;margin-top:4px;font:500 .82rem var(--body);color:var(--muted)}
 .out{color:var(--muted);text-decoration:line-through}
 .layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:28px;align-items:start}
 @media (max-width:900px){.layout{grid-template-columns:1fr}}
@@ -160,6 +161,9 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const $=id=>document.getElementById(id);
 const wk=w=>String(w);
 const castById=id=>S.cast.find(c=>c.id===id);
+const lockTime=()=>S.lockAt?.[wk(S.currentWeek)]||null;
+const fmtTime=iso=>new Date(iso).toLocaleString([],{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+const localInput=iso=>{const d=new Date(iso);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)};
 
 async function api(path,body){
   const r=await fetch(API+path,body?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{});
@@ -195,7 +199,7 @@ function render(){
   $('tabs').innerHTML=[['picks','Picks'],['standings','Standings'],['admin','Commissioner']].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-tab="${k}">${l}</button>`).join('');
   if(!S){$('main').innerHTML=`<p class="note">${esc(loadErr||'Loading the pool…')}</p>`;return}
   $('howto').textContent=`${isOpen(S.currentWeek)?'Final stretch: pick any two couples':'Pick one couple from each tier'}${S.finaleWeek===S.currentWeek?', plus a champion':''}. Judges' scores decide the week.`;
-  $('weekmark').innerHTML=`Season 35<b>Week ${S.currentWeek}</b>${S.locked?'<span class="tag locked">Picks locked</span>':'<span class="tag open">Picks open</span>'}`;
+  $('weekmark').innerHTML=`Season 35<b>Week ${S.currentWeek}</b>${S.locked?'<span class="tag locked">Picks locked</span>':'<span class="tag open">Picks open</span>'}${!S.locked&&lockTime()?`<span class="locks">Locks ${esc(fmtTime(lockTime()))}</span>`:''}`;
   if(tab==='picks')renderPicks();else if(tab==='standings')renderStandings();else renderAdmin();
   renderRoster();
 }
@@ -250,7 +254,7 @@ function renderPicks(){
     const nm=actingAs==='self'?me.name:(P.find(p=>p.id===actingAs)?.name||'');
     h+=`<div class="submitbar"><span style="flex:1">${actingAs==='self'?'Your picks':'Picks for <b>'+esc(nm)+'</b>'}</span>
       <button class="btn rose" id="savePicks" ${!complete||busy?'disabled':''}>${saved?'Update picks':'Save picks'}</button></div>
-      <p class="note">${saved?'Saved. You can change your picks until the commissioner locks the week.':`${open?'Choose two couples':'Choose one couple in each tier'}${finale?' and a champion':''}, then save.`}</p>`;
+      <p class="note">${saved?`Saved. You can change your picks until ${lockTime()?esc(fmtTime(lockTime())):'the commissioner locks the week'}.`:`${open?'Choose two couples':'Choose one couple in each tier'}${finale?' and a champion':''}, then save.`}</p>`;
   }
   $('main').innerHTML=h;
 }
@@ -283,7 +287,10 @@ function renderAdmin(){
   h+=`<div class="panel"><h2>Week ${w}</h2>
     <p>${S.locked?`Picks are locked. ${Object.keys(S.locks[wk(w)]||{}).length} entries captured.`:`${subs.length} of ${P.length} players have picked${subs.length?': '+subs.map(esc).join(', '):''}.`}</p>
     <div class="row">${S.locked?`<button class="btn ghost" data-act="unlock">Reopen picks</button><button class="btn" data-act="nextWeek">Start week ${w+1}</button>`:`<button class="btn rose" data-act="lock">Lock picks</button>`}</div>
-    <p class="note">Lock before the show starts. Locking captures everyone's picks at that moment; scoring uses only what was captured.</p>
+    <p class="note">Locking captures everyone's picks at that moment; scoring uses only what was captured.</p>
+    ${S.locked?'':`<div class="row" style="margin-top:14px"><label>Picks lock at <input type="datetime-local" id="lockAt" value="${lockTime()?localInput(lockTime()):''}"></label>
+      <button class="btn ghost" data-act="lockAt">Save lock time</button>${lockTime()?'<button class="btn ghost" data-act="lockManual">Lock by hand only</button>':''}</div>
+    <p class="note">${lockTime()?`Picks lock automatically ${esc(fmtTime(lockTime()))}. New weeks default to the next live show, Tuesday 8:00 PM Eastern.`:'No automatic lock this week. Lock by hand, or set a time.'}</p>`}
     <div class="row" style="margin-top:14px"><label><input type="checkbox" id="finaleChk" ${S.finaleWeek===w?'checked':''} ${S.locked?'disabled':''}> Week ${w} is the finale</label>
       <label>Champion bonus <input type="number" id="champBonus" min="0" step="1" value="${S.champBonus??25}"></label>
       ${S.finaleWeek!=null?`<label>Champion <select id="champSel"><option value="">Not decided</option>${activeIn(S.finaleWeek).map(c=>`<option value="${esc(c.id)}" ${S.champion===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label>`:''}
@@ -344,7 +351,9 @@ document.addEventListener('click',e=>{
     if(actingAs===b.dataset.rmp)actingAs='self';return run(()=>admin('removePlayer',{id:b.dataset.rmp}),`${p?.name} removed.`)}
   const a=b.dataset.act;if(!a)return;
   if(a==='lock')return run(()=>admin('lock'),()=>`Week ${S.currentWeek} locked with ${Object.keys(S.locks[wk(S.currentWeek)]||{}).length} entries.`);
-  if(a==='unlock')return run(()=>admin('unlock'),'Picks reopened. Lock again to recapture them.');
+  if(a==='unlock')return run(()=>admin('unlock'),()=>`Picks reopened. ${lockTime()?`They lock again ${fmtTime(lockTime())}.`:'Lock by hand, or set a new lock time.'}`);
+  if(a==='lockAt'){const v=$('lockAt').value;if(!v)return;return run(()=>admin('lockAt',{at:new Date(v).toISOString()}),()=>S.locked?`Week ${S.currentWeek} locked.`:`Picks lock ${fmtTime(lockTime())}.`)}
+  if(a==='lockManual')return run(()=>admin('lockAt',{at:null}),'Automatic lock turned off for this week.');
   if(a==='nextWeek'){if(!S.scores[wk(S.currentWeek)]&&!confirm(`Week ${S.currentWeek} has no scores yet. Start week ${S.currentWeek+1} anyway?`))return;
     return run(async()=>{await admin('nextWeek');scoreWeek=S.currentWeek;draft={}},()=>`Week ${S.currentWeek} is open for picks.`)}
   if(a==='scores'){const scores={},out=[];
