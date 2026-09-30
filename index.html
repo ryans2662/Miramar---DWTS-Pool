@@ -288,6 +288,7 @@ function renderRules(){
     <li>Each couple earns their combined judges' total for the week, counting every dance they perform that week.</li>
     <li>Your week is the sum of your couples' totals. Your season is the sum of your weeks.</li>
     <li>Scores come in automatically after the show from the Scoring chart in Wikipedia's season article. The commissioner can correct any number, and their entry stands.</li>
+    <li>Once every couple's score is in, the next week opens for picks automatically.</li>
     <li>Players with the same season total share a place in the standings.</li></ul></div>
   <div class="panel"><h2>Eliminations</h2><ul>
     <li>If a couple you picked is eliminated that week, you get no points for them that week, whatever the judges scored them.</li>
@@ -333,7 +334,7 @@ function renderAdmin(){
   h+=`<div class="panel"><h2>Week ${w}</h2>
     <p>${S.locked?`Picks are locked. ${Object.keys(S.locks[wk(w)]||{}).length} entries captured.`:`${subs.length} of ${P.length} players have picked${subs.length?': '+subs.map(esc).join(', '):''}.`}</p>
     <div class="row">${S.locked?`<button class="btn ghost" data-act="unlock">Reopen picks</button><button class="btn" data-act="nextWeek">Start week ${w+1}</button>`:`<button class="btn rose" data-act="lock">Lock picks</button>`}</div>
-    <p class="note">Locking captures everyone's picks at that moment; scoring uses only what was captured.</p>
+    <p class="note">Locking captures everyone's picks at that moment; scoring uses only what was captured.${S.locked&&S.finaleWeek!==w?` Week ${w+1} opens on its own once week ${w}'s scores are in, from Wikipedia or saved by hand.`:''}</p>
     ${S.locked?'':`<div class="row" style="margin-top:14px"><label>Picks lock at <input type="datetime-local" id="lockAt" value="${lockTime()?localInput(lockTime()):''}"></label>
       <button class="btn ghost" data-act="lockAt">Save lock time</button>${lockTime()?'<button class="btn ghost" data-act="lockManual">Lock by hand only</button>':''}</div>
     <p class="note">${lockTime()?`Picks lock automatically ${esc(fmtTime(lockTime()))}. New weeks default to the next live show, Tuesday 8:00 PM Eastern.`:'No automatic lock this week. Lock by hand, or set a time.'}</p>`}

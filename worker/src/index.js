@@ -206,15 +206,31 @@ async function pullResults(S, wk, chart) {
   return r;
 }
 const PULL_FOR_MS = 48 * 3600e3; // keep picking up Wikipedia corrections for two days after the lock
+// The week the cron should pull: the locked current week, or, once the next week has opened, the
+// week just finished while its correction window lasts. Hand-entered weeks are never pulled.
+function pullWeek(S) {
+  const w = S.locked ? S.currentWeek : S.currentWeek - 1, at = S.lockedAt[w];
+  if (w < 1 || S.scoreSource[w] === 'manual') return null;
+  if (at ? Date.now() - Date.parse(at) > PULL_FOR_MS : w !== S.currentWeek) return null;
+  return w;
+}
+// The next week opens on its own once the locked week has complete results (a successful
+// Wikipedia pull or scores saved by hand). The finale week never advances.
+const readyForNextWeek = S => S.locked && !!S.scoreSource[S.currentWeek] && S.finaleWeek !== S.currentWeek &&
+  activeIn(S, S.currentWeek + 1).length >= 2;
+function startNextWeek(S) { S.currentWeek += 1; S.locked = false; S.lockAt[S.currentWeek] = nextShowtime(new Date()).toISOString(); }
 async function autoPull(env) {
-  const due = S => S.locked && S.scoreSource[S.currentWeek] !== 'manual' &&
-    !(S.lockedAt[S.currentWeek] && Date.now() - Date.parse(S.lockedAt[S.currentWeek]) > PULL_FOR_MS);
-  if (!due(await getState(env))) return; // getState also locks the week once its showtime passes
-  const chart = await fetchChart();
-  const S = await getState(env); // re-read so a commissioner change made during the fetch is kept
-  if (!due(S)) return;
-  await pullResults(S, S.currentWeek, chart);
-  await putKV(env, 'state', S);
+  let S = await getState(env); // getState also locks the week once its showtime passes
+  const w = pullWeek(S);
+  if (w == null && !readyForNextWeek(S)) return;
+  let dirty = false;
+  if (w != null) {
+    const chart = await fetchChart();
+    S = await getState(env); // re-read so a commissioner change made during the fetch is kept
+    if (pullWeek(S) === w) { await pullResults(S, w, chart); dirty = true; }
+  }
+  if (readyForNextWeek(S)) { startNextWeek(S); dirty = true; }
+  if (dirty) await putKV(env, 'state', S);
 }
 
 /* ---------- league logic (mirrors the page) ---------- */
@@ -316,7 +332,7 @@ async function adminAction(env, b) {
       if (S.lockAt[w] && Date.now() >= Date.parse(S.lockAt[w])) S.lockAt[w] = null; // a passed lock time would relock at once
       break;
     }
-    case 'nextWeek': S.currentWeek += 1; S.locked = false; S.lockAt[S.currentWeek] = nextShowtime(new Date()).toISOString(); break;
+    case 'nextWeek': startNextWeek(S); break;
     case 'lockAt': {
       if (b.at !== null && !isFinite(Date.parse(b.at))) fail(400, 'Bad lock time.');
       S.lockAt[w] = b.at === null ? null : new Date(b.at).toISOString();
