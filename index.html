@@ -281,7 +281,7 @@ function renderRules(){
   <div class="panel"><h2>Each week</h2><ul>
     <li>The couples still dancing are split into three tiers, top, middle, and bottom, ranked by their season average judges' score so far. Couples without a score yet rank below the rest, in cast order.</li>
     <li>Pick one couple from each tier. You can change your picks as often as you like until picks lock.</li>
-    <li>Picks lock when the live show starts, Tuesday at 8:00 PM Eastern${lt?` (this week: ${esc(fmtTime(lt))})`:''}. If ABC moves the show, the commissioner moves the lock.</li>
+    <li>Picks lock when the live show starts, 8:00 PM Eastern on the night it airs, usually Tuesday${lt?` (this week: ${esc(fmtTime(lt))})`:''}. If ABC moves the show after the week opens, the commissioner moves the lock.</li>
     <li>Only the picks captured at the lock count. No picks at the lock means no points that week.</li>
     <li>${now}</li></ul></div>
   <div class="panel"><h2>Scoring</h2><ul>
@@ -337,7 +337,7 @@ function renderAdmin(){
     <p class="note">Locking captures everyone's picks at that moment; scoring uses only what was captured.${S.locked&&S.finaleWeek!==w?` Week ${w+1} opens on its own once week ${w}'s scores are in, from Wikipedia or saved by hand.`:''}</p>
     ${S.locked?'':`<div class="row" style="margin-top:14px"><label>Picks lock at <input type="datetime-local" id="lockAt" value="${lockTime()?localInput(lockTime()):''}"></label>
       <button class="btn ghost" data-act="lockAt">Save lock time</button>${lockTime()?'<button class="btn ghost" data-act="lockManual">Lock by hand only</button>':''}</div>
-    <p class="note">${lockTime()?`Picks lock automatically ${esc(fmtTime(lockTime()))}. New weeks default to the next live show, Tuesday 8:00 PM Eastern.`:'No automatic lock this week. Lock by hand, or set a time.'}</p>`}
+    <p class="note">${lockTime()?`Picks lock automatically ${esc(fmtTime(lockTime()))}. New weeks lock at 8:00 PM Eastern on the next air date in Wikipedia\'s episode list, or next Tuesday if it has none.`:'No automatic lock this week. Lock by hand, or set a time.'}</p>`}
     <div class="row" style="margin-top:14px"><label><input type="checkbox" id="finaleChk" ${S.finaleWeek===w?'checked':''} ${S.locked?'disabled':''}> Week ${w} is the finale</label>
       <label>Champion bonus <input type="number" id="champBonus" min="0" step="1" value="${S.champBonus??25}"></label>
       ${S.finaleWeek!=null?`<label>Champion <select id="champSel"><option value="">Not decided</option>${activeIn(S.finaleWeek).map(c=>`<option value="${esc(c.id)}" ${S.champion===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label>`:''}

@@ -76,19 +76,24 @@ async function getPlayers(env) {
 }
 
 /* ---------- showtime ---------- */
-// Season 35 airs live coast to coast on Tuesdays at 8:00 PM Eastern.
+// Season 35 airs live coast to coast at 8:00 PM Eastern, usually on Tuesdays (the fallback when
+// Wikipedia's episode list has no upcoming date).
 const SHOW = { day: 'Tue', hour: 20, tz: 'America/New_York' };
 function zoned(date, tz) {
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', weekday: 'short',
     year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' }).formatToParts(date).map(x => [x.type, x.value]));
   return { y: +p.year, m: +p.month, d: +p.day, h: +p.hour, min: +p.minute, day: p.weekday };
 }
+// 8:00 PM Eastern on the given calendar day.
+function showtimeOn(y, m, d) {
+  const guess = Date.UTC(y, m - 1, d, SHOW.hour), g = zoned(new Date(guess), SHOW.tz);
+  return new Date(guess - (Date.UTC(g.y, g.m - 1, g.d, g.h, g.min) - guess)); // shift by the zone's UTC offset
+}
 function nextShowtime(now) {
   for (let i = 0; i < 8; i++) {
     const z = zoned(new Date(now.getTime() + i * 86400000), SHOW.tz);
     if (z.day !== SHOW.day) continue;
-    const guess = Date.UTC(z.y, z.m - 1, z.d, SHOW.hour), g = zoned(new Date(guess), SHOW.tz);
-    const t = new Date(guess - (Date.UTC(g.y, g.m - 1, g.d, g.h, g.min) - guess)); // shift by the zone's UTC offset
+    const t = showtimeOn(z.y, z.m, z.d);
     if (t > now) return t;
   }
 }
@@ -183,25 +188,36 @@ function resultsFor(S, chart, w) {
   if (missing.length) return { error: `No week ${w} score yet for ${missing.join(', ')}.` };
   return { scores, out };
 }
-// The finale's air date from the article's Episodes list, e.g. "| Title = Finale" with
-// "| OriginalAirDate = {{Start date|2026|11|24}}". Pool weeks don't match episode numbers
-// (the premiere ran two nights), so the finale week is found by air date.
-function parseFinaleDate(raw) {
-  const a = raw.indexOf('== Episodes =='), b = raw.indexOf('\n== ', a + 1);
-  if (a < 0) return null;
+// The season's episodes from the article's Episodes list (up to the next heading, so specials
+// like the After Party are left out), e.g. "| Title = Finale" and
+// "| OriginalAirDate = {{Start date|2026|11|24}}", as {title, y, m, d}. Pool weeks don't match
+// episode numbers (the premiere ran two nights), so episodes are matched to weeks by air date.
+function parseEpisodes(raw) {
+  const a = raw.indexOf('== Episodes =='), b = raw.indexOf('\n==', a + 1);
+  if (a < 0) return [];
+  const eps = [];
   for (const ep of raw.slice(a, b < 0 ? undefined : b).split('{{#invoke:Episode list').slice(1)) {
     const title = cleanText(/\|\s*Title\s*=\s*(.*)/.exec(ep)?.[1] || '');
     const d = /\|\s*OriginalAirDate\s*=\s*\{\{\s*Start date\s*\|\s*(\d{4})\s*\|\s*(\d{1,2})\s*\|\s*(\d{1,2})/i.exec(ep);
-    if (d && /\bfinale\b/i.test(title) && !/semi/i.test(title)) return Date.UTC(+d[1], d[2] - 1, +d[3]);
+    if (d) eps.push({ title, y: +d[1], m: +d[2], d: +d[3] });
   }
-  return null;
+  return eps;
+}
+// The first episode still to air, locked at 8:00 PM Eastern that night; null if the list has none.
+function nextAiring(eps, now) {
+  const times = eps.map(e => showtimeOn(e.y, e.m, e.d)).filter(t => t > now);
+  return times.length ? new Date(Math.min(...times)) : null;
+}
+function finaleDate(eps) {
+  const f = eps.find(e => /\bfinale\b/i.test(e.title) && !/semi/i.test(e.title));
+  return f ? Date.UTC(f.y, f.m - 1, f.d) : null;
 }
 async function fetchChart() {
   try {
     const r = await fetch(WIKI_RAW, { headers: { 'user-agent': 'miramar-dwts-pool/1.0 (private office pool; ballroom-pool.ryans2662.workers.dev)' } });
     if (!r.ok) return { error: `Wikipedia returned ${r.status}.` };
     const raw = await r.text(), chart = parseScoringChart(raw);
-    return chart ? { ...chart, finale: parseFinaleDate(raw) } : { error: 'The scoring chart could not be read.' };
+    return chart ? { ...chart, episodes: parseEpisodes(raw) } : { error: 'The scoring chart could not be read.' };
   } catch { return { error: 'Could not reach Wikipedia.' }; }
 }
 function applyScores(S, wk, sc, outIds) {
@@ -232,13 +248,16 @@ function pullWeek(S) {
 // Wikipedia pull or scores saved by hand). The finale week never advances.
 const readyForNextWeek = S => S.locked && !!S.scoreSource[S.currentWeek] && S.finaleWeek !== S.currentWeek &&
   activeIn(S, S.currentWeek + 1).length >= 2;
-// Opens the next week. When its show airs within a few days of the finale in Wikipedia's episode
-// list, it is marked as the finale before anyone can pick (the commissioner can still untick it).
+// Opens the next week. Picks lock at 8:00 PM Eastern on the next air date in Wikipedia's episode
+// list, so an off-night show (a Monday Disney Night) locks on time; without one, next Tuesday.
+// When that show is within a few days of the Finale episode, the week is marked as the finale
+// before anyone can pick. The commissioner can still change either.
 async function startNextWeek(S, chart) {
-  S.currentWeek += 1; S.locked = false; S.lockAt[S.currentWeek] = nextShowtime(new Date()).toISOString();
   chart ??= await fetchChart();
-  const z = zoned(new Date(S.lockAt[S.currentWeek]), SHOW.tz);
-  if (chart.finale != null && Math.abs(Date.UTC(z.y, z.m - 1, z.d) - chart.finale) <= 3 * 86400e3) S.finaleWeek = S.currentWeek;
+  const eps = chart.episodes || [], now = new Date(), lock = nextAiring(eps, now) || nextShowtime(now);
+  S.currentWeek += 1; S.locked = false; S.lockAt[S.currentWeek] = lock.toISOString();
+  const z = zoned(lock, SHOW.tz), fin = finaleDate(eps);
+  if (fin != null && Math.abs(Date.UTC(z.y, z.m - 1, z.d) - fin) <= 3 * 86400e3) S.finaleWeek = S.currentWeek;
 }
 async function autoPull(env) {
   let S = await getState(env); // getState also locks the week once its showtime passes
