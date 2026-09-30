@@ -304,16 +304,22 @@ async function autoPull(env) {
 
 /* ---------- league logic (mirrors the page) ---------- */
 function activeIn(S, w) { return S.cast.filter(c => c.outWeek == null || c.outWeek >= w); }
-function avgBefore(S, id, w) {
-  let sum = 0, n = 0;
-  for (const k of Object.keys(S.scores)) if (+k < w) { const v = S.scores[k]?.[id]; if (typeof v === 'number') { sum += v; n++; } }
-  return n ? sum / n : null;
+// Tiers rank by a weighted average of the weeks before w, each week weighted by its number
+// (week 1 x1, week 2 x2, ...), so a couple's improvement or slump counts more than their start.
+// `last` is their most recent score, the first tiebreak.
+function formBefore(S, id, w) {
+  let sum = 0, wt = 0, last = null;
+  for (const k of Object.keys(S.scores).map(Number).sort((a, b) => a - b)) if (k < w) {
+    const v = S.scores[k]?.[id]; if (typeof v === 'number') { sum += v * k; wt += k; last = v; }
+  }
+  return wt ? { avg: sum / wt, last } : { avg: null, last: null };
 }
 function tiersFor(S, w) {
-  const act = activeIn(S, w).map(c => ({ c, avg: avgBefore(S, c.id, w) }));
+  const act = activeIn(S, w).map(c => ({ c, ...formBefore(S, c.id, w) }));
   act.sort((a, b) => {
     if ((a.avg == null) !== (b.avg == null)) return a.avg == null ? 1 : -1;
     if (a.avg != null && b.avg !== a.avg) return b.avg - a.avg;
+    if (a.last != null && b.last !== a.last) return b.last - a.last;
     return S.cast.indexOf(a.c) - S.cast.indexOf(b.c);
   });
   const ids = act.map(x => x.c.id), n = ids.length, t = Math.ceil(n / 3), m = Math.ceil((n - t) / 2);

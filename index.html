@@ -187,10 +187,11 @@ async function api(path,body){
 function applyView(d){S=d.state;P=d.players||[];if(d.adminPicks)adminPicks=d.adminPicks}
 
 function activeIn(w){return S.cast.filter(c=>c.outWeek==null||c.outWeek>=w)}
-function avgBefore(id,w){let s=0,n=0;for(const k of Object.keys(S.scores)){if(+k<w){const v=S.scores[k]?.[id];if(typeof v==='number'){s+=v;n++}}}return n?s/n:null}
+// Weighted average of the weeks before w (week k counts k times), plus the most recent score as the first tiebreak. Mirrors the Worker.
+function formBefore(id,w){let s=0,wt=0,last=null;for(const k of Object.keys(S.scores).map(Number).sort((a,b)=>a-b)){if(k<w){const v=S.scores[k]?.[id];if(typeof v==='number'){s+=v*k;wt+=k;last=v}}}return wt?{avg:s/wt,last}:{avg:null,last:null}}
 function tiersFor(w){
-  const act=activeIn(w).map(c=>({c,avg:avgBefore(c.id,w)}));
-  act.sort((a,b)=>{if((a.avg==null)!==(b.avg==null))return a.avg==null?1:-1;if(a.avg!=null&&b.avg!==a.avg)return b.avg-a.avg;return S.cast.indexOf(a.c)-S.cast.indexOf(b.c)});
+  const act=activeIn(w).map(c=>({c,...formBefore(c.id,w)}));
+  act.sort((a,b)=>{if((a.avg==null)!==(b.avg==null))return a.avg==null?1:-1;if(a.avg!=null&&b.avg!==a.avg)return b.avg-a.avg;if(a.last!=null&&b.last!==a.last)return b.last-a.last;return S.cast.indexOf(a.c)-S.cast.indexOf(b.c)});
   const n=act.length,t=Math.ceil(n/3),m=Math.ceil((n-t)/2);
   return{top:act.slice(0,t),mid:act.slice(t,t+m),low:act.slice(t+m)};
 }
@@ -258,10 +259,10 @@ function renderPicks(){
   const opt=(x,attr,on)=>`<button class="opt" ${attr} data-id="${esc(x.c.id)}" aria-pressed="${on}" ${canPick?'':'disabled'}>
       <span class="av" aria-hidden="true">${esc(initials(x.c.name))}${safeImg(x.c.photo)?`<img src="${esc(x.c.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:''}</span>
       <span class="who"><b>${esc(x.c.name)}</b><span>${esc(x.c.pro||'')}</span>${danceLine(x.c.id)}</span>
-      <span class="paddle ${x.avg==null?'none':''}" title="Season average">${x.avg==null?'new':x.avg.toFixed(1)}</span></button>`;
+      <span class="paddle ${x.avg==null?'none':''}" title="Weighted average: recent weeks count more">${x.avg==null?'new':x.avg.toFixed(1)}</span></button>`;
   if(open)h+=`<div class="tiers one"><section class="tier t-open"><h2>Final stretch</h2><div class="sub">${ranked.length} couples left. Pick any two.</div>`+
     ranked.map(x=>opt(x,'data-open="1"',(sel.open||[]).includes(x.c.id))).join('')+`</section></div>`;
-  else h+=`<div class="tiers">`+TIERS.map(t=>`<section class="tier ${t.cls}"><h2>${t.label}</h2><div class="sub">${T[t.k].length} couples, ranked by season average</div>`+
+  else h+=`<div class="tiers">`+TIERS.map(t=>`<section class="tier ${t.cls}"><h2>${t.label}</h2><div class="sub">${T[t.k].length} couples, ranked by weighted average</div>`+
     T[t.k].map(x=>opt(x,`data-tier="${t.k}"`,sel[t.k]===x.c.id)).join('')+`</section>`).join('')+`</div>`;
   if(finale)h+=`<div class="tiers one"><section class="tier t-top"><h2>Pick the champion</h2><div class="sub">Worth ${S.champBonus??25} bonus points if they win the finale.</div>`+
     ranked.map(x=>opt(x,'data-champ="1"',sel.champ===x.c.id)).join('')+`</section></div>`;
@@ -297,7 +298,7 @@ function renderRules(){
     <li>Lost your PIN? Ask the commissioner to reset it. You keep your picks and points.</li>
     <li>Rather text your picks to the commissioner? They can enter them for you.</li></ul></div>
   <div class="panel"><h2>Each week</h2><ul>
-    <li>The couples still dancing are split into three tiers, top, middle, and bottom, ranked by their season average judges' score so far. Couples without a score yet rank below the rest, in cast order.</li>
+    <li>The couples still dancing are split into three tiers, top, middle, and bottom, ranked by a weighted average of their judges' scores so far in which recent weeks count more: week 1 counts once, week 2 twice, week 3 three times, and so on, so a couple who's improving climbs sooner. Ties go to the higher score last week. Couples without a score yet rank below the rest, in cast order.</li>
     <li>Pick one couple from each tier. You can change your picks as often as you like until picks lock.</li>
     <li>Picks lock when the live show starts, 8:00 PM Eastern on the night it airs, usually Tuesday${lt?` (this week: ${esc(fmtTime(lt))})`:''}. If ABC moves the show after the week opens, the commissioner moves the lock.</li>
     <li>Only the picks captured at the lock count. No picks at the lock means no points that week.</li>
