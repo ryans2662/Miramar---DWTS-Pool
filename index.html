@@ -81,6 +81,9 @@ input[type=number]{width:84px}
 .opt .who{flex:1;min-width:0}
 .opt .who b{display:block;font-weight:600}
 .opt .who span{color:var(--muted);font-size:.85rem}
+.opt .who .dance{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.8rem;margin-top:1px}
+.opt .who .dance b{display:inline;color:var(--ink);font-weight:600}
+.tier,.opt{min-width:0}
 .paddle{flex:none;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:700 1rem var(--display);background:var(--ts,var(--silver-soft));color:var(--ink);border:2px solid var(--tc,var(--silver))}
 .paddle.none{font:500 .75rem var(--body);color:var(--muted)}
 .submitbar{background:var(--paper);border-radius:14px;padding:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
@@ -249,11 +252,12 @@ function renderPicks(){
   if(adminOk&&P.length){
     h+=`<div class="row" style="margin-bottom:16px"><label for="acting">Entering picks for</label><select id="acting"><option value="self">${me?'Myself':'Nobody (browse)'}</option>${P.map(p=>`<option value="${esc(p.id)}" ${actingAs===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`;
   }
+  h+=thisWeekPanel(w);
   if(S.locked)h+=`<div class="msg">Week ${w} picks are locked. ${lockedPick?'Your picks are highlighted below.':'Scores post after the show.'}</div>`;
   const open=isOpen(w),finale=S.finaleWeek===w,ranked=[...T.top,...T.mid,...T.low];
   const opt=(x,attr,on)=>`<button class="opt" ${attr} data-id="${esc(x.c.id)}" aria-pressed="${on}" ${canPick?'':'disabled'}>
       <span class="av" aria-hidden="true">${esc(initials(x.c.name))}${safeImg(x.c.photo)?`<img src="${esc(x.c.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:''}</span>
-      <span class="who"><b>${esc(x.c.name)}</b><span>${esc(x.c.pro||'')}</span></span>
+      <span class="who"><b>${esc(x.c.name)}</b><span>${esc(x.c.pro||'')}</span>${danceLine(x.c.id)}</span>
       <span class="paddle ${x.avg==null?'none':''}" title="Season average">${x.avg==null?'new':x.avg.toFixed(1)}</span></button>`;
   if(open)h+=`<div class="tiers one"><section class="tier t-open"><h2>Final stretch</h2><div class="sub">${ranked.length} couples left. Pick any two.</div>`+
     ranked.map(x=>opt(x,'data-open="1"',(sel.open||[]).includes(x.c.id))).join('')+`</section></div>`;
@@ -269,6 +273,20 @@ function renderPicks(){
       <p class="note">${saved?`Saved. You can change your picks until ${lockTime()?esc(fmtTime(lockTime())):'the commissioner locks the week'}.`:`${open?'Choose two couples':'Choose one couple in each tier'}${finale?' and a champion':''}, then save.`}</p>`;
   }
   $('main').innerHTML=h;
+}
+// Theme, format, and each couple's dance and song for week w, from Wikipedia's season article.
+const weekPreview=w=>S.preview?.week===w?S.preview:null;
+function danceLine(id){
+  const d=weekPreview(S.currentWeek)?.couples?.[id];
+  if(!d?.length)return'';
+  const full=d.map(x=>[x.dance,x.song].filter(Boolean).join(' · ')).join(' + ');
+  return`<span class="dance" title="${esc(full)}">${d.map(x=>(x.dance?`<b>${esc(x.dance)}</b>`:'')+(x.dance&&x.song?' · ':'')+esc(x.song)).join(' + ')}</span>`;
+}
+function thisWeekPanel(w){
+  const p=weekPreview(w);if(!p||!(p.theme||p.format))return'';
+  const n=Object.keys(p.couples||{}).length,of=activeIn(w).length;
+  return`<div class="panel"><h2>This week${p.theme?': '+esc(p.theme):''}</h2>${p.format?`<p>${esc(p.format)}</p>`:''}
+    <p class="note">${n?`Dances and songs are in for ${n===of?'every couple':`${n} of ${of} couples`}; they're shown under each name.`:'Dances and songs aren\'t announced yet. They usually come out a day or two before the show and will appear under each couple here.'} From Wikipedia's season article.</p></div>`;
 }
 function renderRules(){
   const w=S.currentWeek,bonus=S.champBonus??25,lt=lockTime();

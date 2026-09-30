@@ -1,7 +1,8 @@
 // Ballroom Pool API — Cloudflare Worker + D1
 // Storage: one table `kv` (k TEXT PRIMARY KEY, v TEXT JSON).
 //   'state'          -> league state {currentWeek, locked, cast, scores, locks, finaleWeek, champion, champBonus, lockAt:{week: ISO|null},
-//                       lockedAt:{week: ISO}, scoreSource:{week: 'manual'|'wikipedia'}, pull:{week, at, ok, note}}
+//                       lockedAt:{week: ISO}, scoreSource:{week: 'manual'|'wikipedia'}, pull:{week, at, ok, note},
+//                       preview:{week, theme, format, couples:{id: [{dance, song}]}, at}}
 //   'player:<id>'    -> {id, name, pinHash|null, weeks:{ "3": {top,mid,low,at} | {open:[id,id],at} (+champ in the finale) }}
 
 const TIERS = ['top', 'mid', 'low'];
@@ -212,12 +213,37 @@ function finaleDate(eps) {
   const f = eps.find(e => /\bfinale\b/i.test(e.title) && !/semi/i.test(e.title));
   return f ? Date.UTC(f.y, f.m - 1, f.d) : null;
 }
+// What's known about week w before it airs, from its "=== Week w: Theme ===" section: the theme,
+// the section's first sentence (the night's format), and each couple's dance and song once
+// announced. The Music cell is the one quoted ("Song" — Artist) and the Dance cell sits just
+// before it, which holds up when a week drops the Scores or Result column.
+const linkText = s => s.replace(/\[\[(?:[^|\]]*\|)?([^\]]*)\]\]/g, '$1');
+function parseWeekPreview(raw, w, S) {
+  const h = new RegExp(`^===\\s*Week ${w}(?::\\s*(.*?))?\\s*===\\s*$`, 'm').exec(raw);
+  if (!h) return null;
+  const rest = raw.slice(h.index + h[0].length), end = rest.search(/\n==/);
+  const sec = (end < 0 ? rest : rest.slice(0, end)).replace(/<ref[^>]*\/>/g, '').replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '').replace(/<!--[\s\S]*?-->/g, '');
+  const intro = linkText(cleanText(sec.trim().split('\n')[0] || ''));
+  const format = /^[^{|!;]/.test(intro) ? (/^.*?[.!?](?=\s|$)/.exec(intro)?.[0] || intro) : '';
+  const first = s => String(s || '').split(/\s+/)[0].toLowerCase();
+  const couples = {};
+  for (const row of sec.split(/\n\|-/)) {
+    const hd = /^!.*scope="row".*$/m.exec(row); if (!hd) continue;
+    const [celeb, pro] = cleanText(splitCell(hd[0].replace(/^!\s*/, '')).text).split('&').map(x => x.trim());
+    const c = S.cast.find(c => first(c.name) === first(celeb) && first(c.pro) === first(pro)); if (!c) continue;
+    const cells = row.split('\n').filter(l => /^\|(?![-}+])/.test(l)).map(l => linkText(cleanText(splitCell(l.slice(1)).text)));
+    const m = cells.findIndex(x => /^["“]/.test(x));
+    const dance = m > 0 ? cells[m - 1] : '', song = m >= 0 ? cells[m].replace(/\s+/g, ' ') : '';
+    if (dance || song) (couples[c.id] ||= []).push({ dance: dance.slice(0, 80), song: song.slice(0, 160) });
+  }
+  return { week: w, theme: linkText(cleanText(h[1] || '')).slice(0, 80), format: format.slice(0, 300), couples };
+}
 async function fetchChart() {
   try {
     const r = await fetch(WIKI_RAW, { headers: { 'user-agent': 'miramar-dwts-pool/1.0 (private office pool; ballroom-pool.ryans2662.workers.dev)' } });
     if (!r.ok) return { error: `Wikipedia returned ${r.status}.` };
     const raw = await r.text(), chart = parseScoringChart(raw);
-    return chart ? { ...chart, episodes: parseEpisodes(raw) } : { error: 'The scoring chart could not be read.' };
+    return chart ? { ...chart, episodes: parseEpisodes(raw), raw } : { error: 'The scoring chart could not be read.' };
   } catch { return { error: 'Could not reach Wikipedia.' }; }
 }
 function applyScores(S, wk, sc, outIds) {
@@ -259,18 +285,21 @@ async function startNextWeek(S, chart) {
   const z = zoned(lock, SHOW.tz), fin = finaleDate(eps);
   if (fin != null && Math.abs(Date.UTC(z.y, z.m - 1, z.d) - fin) <= 3 * 86400e3) S.finaleWeek = S.currentWeek;
 }
+// The season is over once the finale's champion is saved; until then the cron also refreshes
+// the "This week" preview of the current week from the same article fetch.
+const seasonOver = S => S.finaleWeek != null && S.champion != null;
 async function autoPull(env) {
   let S = await getState(env); // getState also locks the week once its showtime passes
-  const w = pullWeek(S);
-  if (w == null && !readyForNextWeek(S)) return;
-  let dirty = false, chart;
-  if (w != null) {
-    chart = await fetchChart();
-    S = await getState(env); // re-read so a commissioner change made during the fetch is kept
-    if (pullWeek(S) === w) { await pullResults(S, w, chart); dirty = true; }
-  }
-  if (readyForNextWeek(S)) { await startNextWeek(S, chart); dirty = true; }
-  if (dirty) await putKV(env, 'state', S);
+  if (seasonOver(S) && pullWeek(S) == null) return;
+  const chart = await fetchChart();
+  S = await getState(env); // re-read so a commissioner change made during the fetch is kept
+  const before = JSON.stringify(S), w = pullWeek(S);
+  if (w != null) await pullResults(S, w, chart);
+  if (readyForNextWeek(S)) await startNextWeek(S, chart);
+  const pv = chart.raw && parseWeekPreview(chart.raw, S.currentWeek, S);
+  const { at, ...prev } = S.preview || {}; // `at` is when the preview last changed
+  if (pv && JSON.stringify(pv) !== JSON.stringify(prev)) S.preview = { ...pv, at: new Date().toISOString() };
+  if (JSON.stringify(S) !== before) await putKV(env, 'state', S);
 }
 
 /* ---------- league logic (mirrors the page) ---------- */
