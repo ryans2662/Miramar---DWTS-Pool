@@ -146,20 +146,26 @@ function parseScoringChart(raw) {
   const weeks = lines.slice(0, firstRow).filter(l => l.startsWith('!') &&
     /^\d+$/.test(cleanText(splitCell(l.slice(1)).text).replace(/^\[\[[^|\]]*\|([^\]]*)\]\]$/, '$1'))).length;
   const rows = [];
-  let cur = null;
+  let cur = null, placeRowsLeft = 0; // rows still covered by a rowspan'd Place cell above them
   for (const line of lines.slice(firstRow)) {
     if (/^!.*scope="row"/.test(line)) {
       const name = cleanText(splitCell(line.replace(/^!\s*/, '')).text);
       const [celeb, pro] = name.split('&').map(x => x.trim().split(/\s+/)[0]);
-      cur = { celeb, pro, cells: [] }; rows.push(cur); continue;
+      cur = { celeb, pro, cells: [], ownPlace: placeRowsLeft <= 0 }; rows.push(cur);
+      if (!cur.ownPlace) placeRowsLeft--;
+      continue;
     }
     if (!cur || !line.startsWith('|') || /^\|[-}+]/.test(line)) continue;
+    if (cur.ownPlace && !cur.cells.length) placeRowsLeft = +(/rowspan="?(\d+)/.exec(line)?.[1] || 1) - 1;
     const { attrs, text } = splitCell(line.slice(1));
     const span = +(/colspan="?(\d+)/.exec(attrs)?.[1] || 1);
     const cell = { v: cellValue(cleanText(text)), out: /f4c7b8/i.test(attrs) || /eliminat|withdr/i.test(text) };
     for (let k = 0; k < span; k++) cur.cells.push(k ? { v: null, out: false } : cell);
   }
-  for (const r of rows) r.cells = r.cells.slice(-weeks); // drops the Place column
+  // Skip the Place cell (only on rows that have their own; the still-dancing couples share one
+  // rowspan'd cell) and read weeks from the left, so an over-wide grey filler after an
+  // elimination (an easy Wikipedia edit slip) cannot shift a couple's scores into the wrong week.
+  for (const r of rows) { const s = r.ownPlace ? 1 : 0; r.cells = r.cells.slice(s, s + weeks); delete r.ownPlace; }
   return { weeks, rows };
 }
 // A week's results for the pool, or a reason they are not ready.
