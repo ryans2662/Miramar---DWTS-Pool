@@ -32,4 +32,6 @@ npx wrangler deploy                           # prints your Worker URL
 
 **Finale week.** When the finale week opens, it is marked as the finale on its own, by matching its show date to the Finale episode in Wikipedia's episode list. Check that "Week N is the finale" is ticked in the Week panel (tick it by hand if Wikipedia had no finale date yet), set the champion bonus (25 by default), and save finale settings. Players must then pick a champion along with their couples. After the show, choose the winner under Champion and save again; everyone who picked them gets the bonus added to that week.
 
+**Who goes home.** Every week except the finale, players also call the couple they think will be eliminated (any couple still dancing). A correct call adds 5 bonus points to that week; on a double elimination either couple counts. Picks can't be saved without it.
+
 Players join with a name and a 4 to 8 digit PIN. For anyone who'd rather text you their picks, add them under Players and enter picks for them from the Picks tab.

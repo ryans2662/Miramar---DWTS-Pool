@@ -109,7 +109,8 @@ h3{font:700 1.3rem var(--display);margin:30px 0 10px}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--tc)}
 .pks{display:flex;gap:6px 16px;flex-wrap:wrap}
 .tiers.one{grid-template-columns:1fr}
-.t-open{--tc:var(--rose);--ts:var(--rose-soft)}
+.t-open,.t-elim{--tc:var(--rose);--ts:var(--rose-soft)}
+.optgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));column-gap:8px}
 
 /* admin */
 .panel{background:var(--paper);border-radius:14px;padding:18px;margin-bottom:18px}
@@ -201,7 +202,9 @@ const pickIds=p=>p?(Array.isArray(p.open)?p.open:[p.top,p.mid,p.low]):[];
 const outIn=(w,id)=>castById(id)?.outWeek===+w;
 const pickPts=(w,id)=>{const v=S.scores[wk(w)]?.[id];return typeof v==='number'&&!outIn(w,id)?v:0};
 const champPts=(w,p)=>S.finaleWeek!=null&&+w===S.finaleWeek&&S.champion&&p?.champ===S.champion?(S.champBonus??25):0;
-const weekTotal=(w,p)=>p?pickIds(p).reduce((s,id)=>s+pickPts(w,id),0)+champPts(w,p):0;
+const ELIM_BONUS=5; // for calling the couple that goes home; a double elimination pays if either was your call
+const elimPts=(w,p)=>p?.elim&&outIn(w,p.elim)?ELIM_BONUS:0;
+const weekTotal=(w,p)=>p?pickIds(p).reduce((s,id)=>s+pickPts(w,id),0)+champPts(w,p)+elimPts(w,p):0;
 function standings(){
   const weeks=Object.keys(S.locks||{}).map(Number).filter(w=>S.scores[wk(w)]).sort((a,b)=>a-b),rows={};
   for(const w of weeks)for(const [key,p] of Object.entries(S.locks[wk(w)])){
@@ -214,7 +217,7 @@ const flashHtml=()=>flash?`<div class="msg ${flash.ok?'ok':''}">${esc(flash.text
 function render(){
   $('tabs').innerHTML=[['picks','Picks'],['standings','Standings'],['rules','Rules'],['admin','Commissioner']].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-tab="${k}">${l}</button>`).join('');
   if(!S){$('main').innerHTML=`<p class="note">${esc(loadErr||'Loading the pool…')}</p>`;return}
-  $('howto').textContent=`${isOpen(S.currentWeek)?'Final stretch: pick any two couples':'Pick one couple from each tier'}${S.finaleWeek===S.currentWeek?', plus a champion':''}. Judges' scores decide the week.`;
+  $('howto').textContent=`${isOpen(S.currentWeek)?'Final stretch: pick any two couples':'Pick one couple from each tier'}${S.finaleWeek===S.currentWeek?', plus a champion':', plus who goes home'}. Judges' scores decide the week.`;
   $('weekmark').innerHTML=`Season 35<b>Week ${S.currentWeek}</b>${S.locked?'<span class="tag locked">Picks locked</span>':'<span class="tag open">Picks open</span>'}${!S.locked&&lockTime()?`<span class="locks">Locks ${esc(fmtTime(lockTime()))}</span>`:''}`;
   if(tab==='picks')renderPicks();else if(tab==='standings')renderStandings();else if(tab==='rules')renderRules();else renderAdmin();
   renderRoster();
@@ -264,14 +267,16 @@ function renderPicks(){
     ranked.map(x=>opt(x,'data-open="1"',(sel.open||[]).includes(x.c.id))).join('')+`</section></div>`;
   else h+=`<div class="tiers">`+TIERS.map(t=>`<section class="tier ${t.cls}"><h2>${t.label}</h2><div class="sub">${T[t.k].length} couples, ranked by weighted average</div>`+
     T[t.k].map(x=>opt(x,`data-tier="${t.k}"`,sel[t.k]===x.c.id)).join('')+`</section>`).join('')+`</div>`;
+  if(!finale)h+=`<div class="tiers one"><section class="tier t-elim"><h2>Who goes home?</h2><div class="sub">Call the couple eliminated this week for ${ELIM_BONUS} bonus points. Any couple still dancing, even one you picked above.</div>`+
+    `<div class="optgrid">${ranked.map(x=>opt(x,'data-elim="1"',sel.elim===x.c.id)).join('')}</div></section></div>`;
   if(finale)h+=`<div class="tiers one"><section class="tier t-top"><h2>Pick the champion</h2><div class="sub">Worth ${S.champBonus??25} bonus points if they win the finale.</div>`+
     ranked.map(x=>opt(x,'data-champ="1"',sel.champ===x.c.id)).join('')+`</section></div>`;
   if(canPick){
-    const complete=(open?(sel.open||[]).length===2:TIERS.every(t=>sel[t.k]))&&(!finale||!!sel.champ);
+    const complete=(open?(sel.open||[]).length===2:TIERS.every(t=>sel[t.k]))&&(finale?!!sel.champ:!!sel.elim);
     const nm=actingAs==='self'?me.name:(P.find(p=>p.id===actingAs)?.name||'');
     h+=`<div class="submitbar"><span style="flex:1">${actingAs==='self'?'Your picks':'Picks for <b>'+esc(nm)+'</b>'}</span>
       <button class="btn rose" id="savePicks" ${!complete||busy?'disabled':''}>${saved?'Update picks':'Save picks'}</button></div>
-      <p class="note">${saved?`Saved. You can change your picks until ${lockTime()?esc(fmtTime(lockTime())):'the commissioner locks the week'}.`:`${open?'Choose two couples':'Choose one couple in each tier'}${finale?' and a champion':''}, then save.`}</p>`;
+      <p class="note">${saved?`Saved. You can change your picks until ${lockTime()?esc(fmtTime(lockTime())):'the commissioner locks the week'}.`:`${open?'Choose two couples':'Choose one couple in each tier'}${finale?' and a champion':' and who goes home'}, then save.`}</p>`;
   }
   $('main').innerHTML=h;
 }
@@ -311,7 +316,8 @@ function renderRules(){
     <li>Players with the same season total share a place in the standings.</li></ul></div>
   <div class="panel"><h2>Eliminations</h2><ul>
     <li>If a couple you picked is eliminated that week, you get no points for them that week, whatever the judges scored them.</li>
-    <li>From the next week on, they drop out of the tiers and can't be picked.</li></ul></div>
+    <li>From the next week on, they drop out of the tiers and can't be picked.</li>
+    <li>Every week except the finale, you also call who goes home: any couple still dancing, even one of your own picks. If they're eliminated that week, you get ${ELIM_BONUS} bonus points. On a double elimination, either couple counts. You can't save your picks without this call.</li></ul></div>
   <div class="panel"><h2>Final stretch</h2><ul>
     <li>Once ${OPEN_AT} or fewer couples remain, the tiers drop. Pick any two different couples.</li>
     <li>Selecting a third couple replaces the one you picked first.</li></ul></div>
@@ -338,9 +344,10 @@ function renderStandings(){
   const ent=Object.values(L).sort((a,b)=>weekTotal(standWeek,b)-weekTotal(standWeek,a)||a.name.localeCompare(b.name));
   const rk=ranks(ent.map(p=>weekTotal(standWeek,p)));
   const pk=(id,cls)=>`<span class="pk ${cls}">${cls?'<span class="dot"></span>':''}${outIn(standWeek,id)?`<span class="out">${esc(castById(id)?.name||'—')}</span>`:esc(castById(id)?.name||'—')}${has?` <b>${pickPts(standWeek,id)}</b>${outIn(standWeek,id)?' <span class="note">eliminated</span>':''}`:''}</span>`;
+  const elim=p=>p.elim?`<span class="pk">Goes home: ${esc(castById(p.elim)?.name||'—')}${has?` <b>${elimPts(standWeek,p)?'+'+ELIM_BONUS:'0'}</b>`:''}</span>`:'';
   const champ=p=>standWeek===S.finaleWeek&&S.champion&&p.champ?`<span class="pk">Champion: ${esc(castById(p.champ)?.name||'—')} <b>+${champPts(standWeek,p)}</b></span>`:'';
   h+=`<div class="scroll"><table><thead><tr><th></th><th>Player</th><th>Picks</th><th class="num">Week ${standWeek}</th></tr></thead><tbody>`+
-    ent.map((p,i)=>`<tr class="${has&&rk[i]===1?'lead':''}"><td class="rank">${has?rk[i]:''}</td><td>${esc(p.name)}</td><td><span class="pks">${Array.isArray(p.open)?p.open.map(id=>pk(id,'')).join(''):TIERS.map(t=>pk(p[t.k],t.cls)).join('')}${champ(p)}</span></td><td class="num total">${has?weekTotal(standWeek,p):'–'}</td></tr>`).join('')+
+    ent.map((p,i)=>`<tr class="${has&&rk[i]===1?'lead':''}"><td class="rank">${has?rk[i]:''}</td><td>${esc(p.name)}</td><td><span class="pks">${Array.isArray(p.open)?p.open.map(id=>pk(id,'')).join(''):TIERS.map(t=>pk(p[t.k],t.cls)).join('')}${champ(p)}${elim(p)}</span></td><td class="num total">${has?weekTotal(standWeek,p):'–'}</td></tr>`).join('')+
     `</tbody></table></div>${ent.length?'':`<p class="note">No one had picks in when week ${standWeek} locked.</p>`}${has?'':`<p class="note">Scores for week ${standWeek} aren't in yet.</p>`}`;
   $('main').innerHTML=h;
 }
@@ -400,6 +407,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.open){if(S.locked)return;const id=b.dataset.id,cur=[...(draft.open||currentPick()?.open||[])];
     draft.open=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id].slice(-2);flash=null;renderPicks();return}
   if(b.dataset.champ){if(S.locked)return;draft.champ=b.dataset.id;flash=null;renderPicks();return}
+  if(b.dataset.elim){if(S.locked)return;draft.elim=b.dataset.id;flash=null;renderPicks();return}
   if(b.id==='join'||b.id==='login'){
     const name=$('aname').value.trim(),pin=$('apin').value.trim();
     return run(async()=>{const d=await api(b.id==='join'?'/api/join':'/api/login',{name,pin});me={id:d.id,name:d.name,pin};myWeeks=d.weeks||{};store.set('bp_me',me);await refresh()},()=>`Welcome, ${me.name}.`)}

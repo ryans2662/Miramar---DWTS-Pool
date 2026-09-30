@@ -3,7 +3,7 @@
 //   'state'          -> league state {currentWeek, locked, cast, scores, locks, finaleWeek, champion, champBonus, lockAt:{week: ISO|null},
 //                       lockedAt:{week: ISO}, scoreSource:{week: 'manual'|'wikipedia'}, pull:{week, at, ok, note},
 //                       preview:{week, theme, format, couples:{id: [{dance, song}]}, at}}
-//   'player:<id>'    -> {id, name, pinHash|null, weeks:{ "3": {top,mid,low,at} | {open:[id,id],at} (+champ in the finale) }}
+//   'player:<id>'    -> {id, name, pinHash|null, weeks:{ "3": {top,mid,low,at} | {open:[id,id],at} (+elim, or +champ in the finale) }}
 
 const TIERS = ['top', 'mid', 'low'];
 const OPEN_AT = 6; // at or below this many active couples, tiers drop and players pick any two
@@ -341,6 +341,9 @@ function validatePick(S, pick) {
   if (S.finaleWeek === w) {
     if (!act.includes(pick?.champ)) fail(400, 'Pick a champion for the finale.');
     out.champ = pick.champ;
+  } else { // every week but the finale, also call the couple going home (any couple still dancing)
+    if (!act.includes(pick?.elim)) fail(400, 'Pick the couple you think goes home this week.');
+    out.elim = pick.elim;
   }
   return { ...out, at: new Date().toISOString() };
 }
