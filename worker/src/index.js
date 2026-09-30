@@ -183,11 +183,25 @@ function resultsFor(S, chart, w) {
   if (missing.length) return { error: `No week ${w} score yet for ${missing.join(', ')}.` };
   return { scores, out };
 }
+// The finale's air date from the article's Episodes list, e.g. "| Title = Finale" with
+// "| OriginalAirDate = {{Start date|2026|11|24}}". Pool weeks don't match episode numbers
+// (the premiere ran two nights), so the finale week is found by air date.
+function parseFinaleDate(raw) {
+  const a = raw.indexOf('== Episodes =='), b = raw.indexOf('\n== ', a + 1);
+  if (a < 0) return null;
+  for (const ep of raw.slice(a, b < 0 ? undefined : b).split('{{#invoke:Episode list').slice(1)) {
+    const title = cleanText(/\|\s*Title\s*=\s*(.*)/.exec(ep)?.[1] || '');
+    const d = /\|\s*OriginalAirDate\s*=\s*\{\{\s*Start date\s*\|\s*(\d{4})\s*\|\s*(\d{1,2})\s*\|\s*(\d{1,2})/i.exec(ep);
+    if (d && /\bfinale\b/i.test(title) && !/semi/i.test(title)) return Date.UTC(+d[1], d[2] - 1, +d[3]);
+  }
+  return null;
+}
 async function fetchChart() {
   try {
     const r = await fetch(WIKI_RAW, { headers: { 'user-agent': 'miramar-dwts-pool/1.0 (private office pool; ballroom-pool.ryans2662.workers.dev)' } });
     if (!r.ok) return { error: `Wikipedia returned ${r.status}.` };
-    return parseScoringChart(await r.text()) || { error: 'The scoring chart could not be read.' };
+    const raw = await r.text(), chart = parseScoringChart(raw);
+    return chart ? { ...chart, finale: parseFinaleDate(raw) } : { error: 'The scoring chart could not be read.' };
   } catch { return { error: 'Could not reach Wikipedia.' }; }
 }
 function applyScores(S, wk, sc, outIds) {
@@ -218,18 +232,25 @@ function pullWeek(S) {
 // Wikipedia pull or scores saved by hand). The finale week never advances.
 const readyForNextWeek = S => S.locked && !!S.scoreSource[S.currentWeek] && S.finaleWeek !== S.currentWeek &&
   activeIn(S, S.currentWeek + 1).length >= 2;
-function startNextWeek(S) { S.currentWeek += 1; S.locked = false; S.lockAt[S.currentWeek] = nextShowtime(new Date()).toISOString(); }
+// Opens the next week. When its show airs within a few days of the finale in Wikipedia's episode
+// list, it is marked as the finale before anyone can pick (the commissioner can still untick it).
+async function startNextWeek(S, chart) {
+  S.currentWeek += 1; S.locked = false; S.lockAt[S.currentWeek] = nextShowtime(new Date()).toISOString();
+  chart ??= await fetchChart();
+  const z = zoned(new Date(S.lockAt[S.currentWeek]), SHOW.tz);
+  if (chart.finale != null && Math.abs(Date.UTC(z.y, z.m - 1, z.d) - chart.finale) <= 3 * 86400e3) S.finaleWeek = S.currentWeek;
+}
 async function autoPull(env) {
   let S = await getState(env); // getState also locks the week once its showtime passes
   const w = pullWeek(S);
   if (w == null && !readyForNextWeek(S)) return;
-  let dirty = false;
+  let dirty = false, chart;
   if (w != null) {
-    const chart = await fetchChart();
+    chart = await fetchChart();
     S = await getState(env); // re-read so a commissioner change made during the fetch is kept
     if (pullWeek(S) === w) { await pullResults(S, w, chart); dirty = true; }
   }
-  if (readyForNextWeek(S)) { startNextWeek(S); dirty = true; }
+  if (readyForNextWeek(S)) { await startNextWeek(S, chart); dirty = true; }
   if (dirty) await putKV(env, 'state', S);
 }
 
@@ -332,7 +353,7 @@ async function adminAction(env, b) {
       if (S.lockAt[w] && Date.now() >= Date.parse(S.lockAt[w])) S.lockAt[w] = null; // a passed lock time would relock at once
       break;
     }
-    case 'nextWeek': startNextWeek(S); break;
+    case 'nextWeek': await startNextWeek(S); break;
     case 'lockAt': {
       if (b.at !== null && !isFinite(Date.parse(b.at))) fail(400, 'Bad lock time.');
       S.lockAt[w] = b.at === null ? null : new Date(b.at).toISOString();
